@@ -1,0 +1,22 @@
+// firestore.rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Sales - solo lectura autenticada, escritura desde servidor
+    match /sales/{saleId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Solo desde Cloud Functions/API
+    }
+    
+    // Closers - solo lectura autenticada
+    match /closers/{closerId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    
+    // Para desarrollo - permitir todo (CAMBIAR EN PRODUCCIÓN)
+    // match /{document=**} {
+    //   allow read, write: if true;
+    // }
+  }
+}

@@ -1,0 +1,15 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Comprobantes de pago
+    match /proofs/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if false; // Solo desde servidor
+    }
+    
+    // Para desarrollo - permitir todo (CAMBIAR EN PRODUCCIÓN)
+    // match /{allPaths=**} {
+    //   allow read, write: if true;
+    // }
+  }
+}

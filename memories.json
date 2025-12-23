@@ -1,0 +1,24 @@
+{
+  "memories": [
+    {
+      "id": "mem_1766520271381_1mx0xn1ut",
+      "content": "Created CLAUDE.md for registro_ventas_gp project - Sales Tracker that captures WhatsApp sales via Evolution API webhooks, stores in Firebase Firestore, displays on Next.js dashboard. Key architecture: WhatsApp Group → Evolution API → /api/webhook/evolution → Firestore → Dashboard",
+      "type": "concept",
+      "tags": [
+        "concept",
+        "api",
+        "proyecto",
+        "claude-md",
+        "sales-tracker",
+        "registro_ventas_gp"
+      ],
+      "timestamp": "2025-12-23T20:04:31.380Z",
+      "context": "Initial /init command for the sales tracker project",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-23T20:04:31.380Z",
+      "lastVerified": "2025-12-23T20:04:31.380Z",
+      "status": "fresh"
+    }
+  ],
+  "lastUpdated": "2025-12-23T20:04:31.380Z"
+}
