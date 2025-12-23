@@ -62,8 +62,10 @@ export interface EvolutionWebhookPayload {
       participant?: string;
     };
     pushName: string;
+    participantAlt?: string; // Número de teléfono real del remitente
     message: {
       conversation?: string;
+      mediaUrl?: string; // URL directa del media (imagen o documento)
       extendedTextMessage?: {
         text: string;
         contextInfo?: {

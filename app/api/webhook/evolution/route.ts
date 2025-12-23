@@ -39,22 +39,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'ignored', reason: 'not from a group' });
     }
 
-    // Extraer datos del remitente - usar participant para grupos
-    const senderJid = data.key.participant || data.key.remoteJid;
-    const senderPhone = extractPhoneFromJid(senderJid);
+    // Extraer datos del remitente - usar participantAlt para el número real del closer
+    const senderPhone = data.participantAlt || extractPhoneFromJid(data.key.participant || data.key.remoteJid);
     const senderName = data.pushName || senderPhone;
     const messageId = data.key.id;
     const messageTimestamp = data.messageTimestamp;
 
     // Caso 1: Es un mensaje con imagen/documento (comprobante)
-    if (data.message?.imageMessage || data.message?.documentMessage) {
-      const isImage = !!data.message.imageMessage;
-      const mediaMessage = isImage ? data.message.imageMessage : data.message.documentMessage;
+    // La URL está en data.message.mediaUrl para ambos tipos
+    // Se detecta el tipo por imageMessage.mimetype (image/jpeg) o documentMessage (application/pdf)
+    if (data.message?.imageMessage || data.message?.documentMessage || data.message?.mediaUrl) {
+      // mediaUrl está directamente en data.message.mediaUrl
+      const mediaUrl = data.message?.mediaUrl ||
+                       data.message?.imageMessage?.url ||
+                       data.message?.imageMessage?.mediaUrl ||
+                       data.message?.documentMessage?.url ||
+                       data.message?.documentMessage?.mediaUrl || '';
 
-      // Obtener la URL de Evolution (mediaUrl o url)
-      const mediaUrl = mediaMessage?.url || mediaMessage?.mediaUrl || '';
-      const mimetype = mediaMessage?.mimetype || '';
-      const caption = mediaMessage?.caption || '';
+      // Detectar tipo por mimetype del imageMessage o documentMessage
+      const mimetype = data.message?.imageMessage?.mimetype ||
+                       data.message?.documentMessage?.mimetype || '';
+      const isImage = mimetype.startsWith('image/');
+      const caption = data.message?.imageMessage?.caption || '';
 
       if (mediaUrl) {
         // Guardar comprobante en Firestore (colección 'proofs')
