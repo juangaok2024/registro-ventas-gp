@@ -31,7 +31,12 @@ export interface Sale {
   groupJid: string;
   messageId: string;
   status: 'pending' | 'verified' | 'rejected';
-  
+
+  // Verificación manual
+  verified: boolean;
+  verifiedAt: Date | null;
+  verifiedBy: string | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,14 +83,16 @@ export interface EvolutionWebhookPayload {
         };
       };
       imageMessage?: {
-        url: string;
+        url?: string;
+        mediaUrl?: string;
         mimetype: string;
         caption?: string;
       };
       documentMessage?: {
-        url: string;
+        url?: string;
+        mediaUrl?: string;
         mimetype: string;
-        fileName: string;
+        fileName?: string;
       };
     };
     messageType: string;

@@ -1,130 +1,171 @@
 // app/api/webhook/evolution/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { db, storage } from '@/lib/firebase';
-import { collection, addDoc, query, where, getDocs, updateDoc, doc, increment } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db } from '@/lib/firebase';
+import {
+  collection,
+  addDoc,
+  query,
+  where,
+  getDocs,
+  updateDoc,
+  doc,
+  increment,
+  orderBy,
+  limit
+} from 'firebase/firestore';
 import { parseSaleMessage, isSaleReport, extractPhoneFromJid } from '@/lib/parser';
 import { EvolutionWebhookPayload, Sale } from '@/types/sales';
 
 // ID del grupo de comprobantes - configurar en .env
 const SALES_GROUP_JID = process.env.SALES_GROUP_JID || '';
-
-// Cache temporal para asociar comprobantes con mensajes de venta
-// En producción, usar Redis o similar
-const pendingProofs = new Map<string, { url: string; type: 'image' | 'pdf'; messageId: string }>();
+const OUTGOING_WEBHOOK_URL = process.env.OUTGOING_WEBHOOK_URL || '';
 
 export async function POST(request: NextRequest) {
   try {
     const payload: EvolutionWebhookPayload = await request.json();
-    
+
     console.log('📨 Webhook received:', payload.event);
-    
-    // Solo procesar mensajes del grupo de ventas
-    if (payload.event !== 'messages.upsert') {
+
+    // Solo procesar mensajes
+    if (payload.event !== 'messages.upsert' && payload.event !== 'MESSAGES_UPSERT') {
       return NextResponse.json({ status: 'ignored', reason: 'not a message event' });
     }
-    
+
     const { data } = payload;
     const groupJid = data.key.remoteJid;
-    
-    // Verificar que sea del grupo correcto
-    if (groupJid !== SALES_GROUP_JID && !groupJid.endsWith('@g.us')) {
-      return NextResponse.json({ status: 'ignored', reason: 'not from sales group' });
+
+    // Verificar que sea de un grupo
+    if (!groupJid?.endsWith('@g.us')) {
+      return NextResponse.json({ status: 'ignored', reason: 'not from a group' });
     }
-    
+
+    // Extraer datos del remitente - usar participant para grupos
     const senderJid = data.key.participant || data.key.remoteJid;
     const senderPhone = extractPhoneFromJid(senderJid);
     const senderName = data.pushName || senderPhone;
     const messageId = data.key.id;
-    
+    const messageTimestamp = data.messageTimestamp;
+
     // Caso 1: Es un mensaje con imagen/documento (comprobante)
-    if (data.message.imageMessage || data.message.documentMessage) {
+    if (data.message?.imageMessage || data.message?.documentMessage) {
       const isImage = !!data.message.imageMessage;
-      const mediaUrl = isImage 
-        ? data.message.imageMessage?.url 
-        : data.message.documentMessage?.url;
-      
+      const mediaMessage = isImage ? data.message.imageMessage : data.message.documentMessage;
+
+      // Obtener la URL de Evolution (mediaUrl o url)
+      const mediaUrl = mediaMessage?.url || mediaMessage?.mediaUrl || '';
+      const mimetype = mediaMessage?.mimetype || '';
+      const caption = mediaMessage?.caption || '';
+
       if (mediaUrl) {
-        // Guardar en cache temporal esperando el mensaje con los datos
-        pendingProofs.set(messageId, {
-          url: mediaUrl,
-          type: isImage ? 'image' : 'pdf',
+        // Guardar comprobante en Firestore (colección 'proofs')
+        const proofsRef = collection(db, 'proofs');
+        await addDoc(proofsRef, {
           messageId,
+          mediaUrl,
+          mediaType: isImage ? 'image' : 'document',
+          mimetype,
+          caption,
+          senderPhone,
+          senderName,
+          groupJid,
+          timestamp: new Date(messageTimestamp * 1000),
+          createdAt: new Date(),
+          linkedToSale: false, // Se actualiza cuando se vincula a una venta
         });
-        
-        console.log('📎 Comprobante guardado en cache:', messageId);
-        
-        // Limpiar cache después de 30 minutos
-        setTimeout(() => pendingProofs.delete(messageId), 30 * 60 * 1000);
+
+        console.log('📎 Comprobante guardado en Firestore:', messageId);
       }
-      
-      return NextResponse.json({ status: 'proof_cached', messageId });
+
+      return NextResponse.json({ status: 'proof_saved', messageId });
     }
-    
+
     // Caso 2: Es un mensaje de texto (posible reporte de venta)
-    const messageText = data.message.conversation || 
-                        data.message.extendedTextMessage?.text || '';
-    
-    if (!isSaleReport(messageText)) {
+    const messageText = data.message?.conversation ||
+                        data.message?.extendedTextMessage?.text || '';
+
+    if (!messageText || !isSaleReport(messageText)) {
       return NextResponse.json({ status: 'ignored', reason: 'not a sale report' });
     }
-    
+
     console.log('📝 Procesando reporte de venta de:', senderName);
-    
+
     // Parsear el mensaje
     const parsedData = parseSaleMessage(messageText);
-    
+
     if (!parsedData) {
       return NextResponse.json({ status: 'error', reason: 'failed to parse message' });
     }
-    
-    // Buscar el comprobante asociado (mensaje citado)
+
+    // Buscar el comprobante asociado
     let proofUrl = '';
     let proofType: 'image' | 'pdf' = 'image';
     let proofMessageId = '';
-    
-    const quotedMessageId = data.message.extendedTextMessage?.contextInfo?.stanzaId;
-    
-    if (quotedMessageId && pendingProofs.has(quotedMessageId)) {
-      const proof = pendingProofs.get(quotedMessageId)!;
-      proofUrl = proof.url;
-      proofType = proof.type;
-      proofMessageId = proof.messageId;
-      pendingProofs.delete(quotedMessageId);
-      console.log('✅ Comprobante asociado encontrado');
-    }
-    
-    // Si el mensaje citado tiene imagen/documento directamente
-    const quotedMessage = data.message.extendedTextMessage?.contextInfo?.quotedMessage;
-    if (quotedMessage?.imageMessage?.url) {
-      proofUrl = quotedMessage.imageMessage.url;
-      proofType = 'image';
-    } else if (quotedMessage?.documentMessage?.url) {
-      proofUrl = quotedMessage.documentMessage.url;
-      proofType = 'pdf';
-    }
-    
-    // Descargar y guardar el comprobante en Firebase Storage
-    let storedProofUrl = proofUrl;
-    if (proofUrl) {
-      try {
-        // Descargar desde Evolution API
-        const proofResponse = await fetch(proofUrl);
-        const proofBlob = await proofResponse.blob();
-        
-        // Subir a Firebase Storage
-        const fileName = `proofs/${Date.now()}_${messageId}.${proofType === 'image' ? 'jpg' : 'pdf'}`;
-        const storageRef = ref(storage, fileName);
-        await uploadBytes(storageRef, proofBlob);
-        storedProofUrl = await getDownloadURL(storageRef);
-        
-        console.log('☁️ Comprobante subido a Storage:', fileName);
-      } catch (error) {
-        console.error('Error subiendo comprobante:', error);
-        // Continuar sin el comprobante
+
+    // Opción 1: Buscar por mensaje citado (quotedMessageId)
+    const quotedMessageId = data.message?.extendedTextMessage?.contextInfo?.stanzaId;
+
+    if (quotedMessageId) {
+      // Buscar en la colección de proofs
+      const proofsRef = collection(db, 'proofs');
+      const proofQuery = query(proofsRef, where('messageId', '==', quotedMessageId));
+      const proofSnapshot = await getDocs(proofQuery);
+
+      if (!proofSnapshot.empty) {
+        const proofDoc = proofSnapshot.docs[0];
+        const proofData = proofDoc.data();
+        proofUrl = proofData.mediaUrl;
+        proofType = proofData.mediaType === 'image' ? 'image' : 'pdf';
+        proofMessageId = proofData.messageId;
+
+        // Marcar como vinculado
+        await updateDoc(doc(db, 'proofs', proofDoc.id), { linkedToSale: true });
+        console.log('✅ Comprobante vinculado desde Firestore');
       }
     }
-    
+
+    // Opción 2: Si el mensaje citado tiene imagen/documento directamente en el payload
+    const quotedMessage = data.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (!proofUrl && quotedMessage) {
+      if (quotedMessage.imageMessage?.url) {
+        proofUrl = quotedMessage.imageMessage.url;
+        proofType = 'image';
+      } else if (quotedMessage.documentMessage?.url) {
+        proofUrl = quotedMessage.documentMessage.url;
+        proofType = 'pdf';
+      }
+    }
+
+    // Opción 3: Buscar el último comprobante del mismo sender en los últimos 10 minutos
+    if (!proofUrl) {
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const proofsRef = collection(db, 'proofs');
+      const recentProofQuery = query(
+        proofsRef,
+        where('senderPhone', '==', senderPhone),
+        where('linkedToSale', '==', false),
+        where('createdAt', '>=', tenMinutesAgo),
+        orderBy('createdAt', 'desc'),
+        limit(1)
+      );
+
+      try {
+        const recentSnapshot = await getDocs(recentProofQuery);
+        if (!recentSnapshot.empty) {
+          const proofDoc = recentSnapshot.docs[0];
+          const proofData = proofDoc.data();
+          proofUrl = proofData.mediaUrl;
+          proofType = proofData.mediaType === 'image' ? 'image' : 'pdf';
+          proofMessageId = proofData.messageId;
+
+          await updateDoc(doc(db, 'proofs', proofDoc.id), { linkedToSale: true });
+          console.log('✅ Comprobante reciente vinculado automáticamente');
+        }
+      } catch (e) {
+        // Si falla el query compuesto (índice faltante), continuar sin comprobante
+        console.log('⚠️ No se pudo buscar comprobante reciente:', e);
+      }
+    }
+
     // Crear el registro de venta
     const saleData: Omit<Sale, 'id'> = {
       closerPhone: senderPhone,
@@ -139,37 +180,70 @@ export async function POST(request: NextRequest) {
       paymentMethod: parsedData.paymentMethod,
       paymentType: parsedData.paymentType,
       extras: parsedData.extras,
-      proofUrl: storedProofUrl,
+      proofUrl,
       proofType,
       proofMessageId,
       rawMessage: messageText,
       groupJid,
       messageId,
-      status: parsedData.hasCheckmark ? 'verified' : 'pending',
-      createdAt: new Date(data.messageTimestamp * 1000),
+      status: 'pending', // Siempre pendiente hasta verificación manual
+      verified: false,
+      verifiedAt: null,
+      verifiedBy: null,
+      createdAt: new Date(messageTimestamp * 1000),
       updatedAt: new Date(),
     };
-    
+
     // Guardar en Firestore
     const salesRef = collection(db, 'sales');
     const docRef = await addDoc(salesRef, saleData);
-    
+
     console.log('💾 Venta guardada:', docRef.id);
-    
+
     // Actualizar stats del closer
     await updateCloserStats(senderPhone, senderName, parsedData.amount, parsedData.currency);
-    
-    return NextResponse.json({ 
-      status: 'success', 
+
+    // Enviar webhook de salida si está configurado
+    if (OUTGOING_WEBHOOK_URL) {
+      try {
+        await fetch(OUTGOING_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'new_sale',
+            saleId: docRef.id,
+            data: {
+              client: parsedData.clientName,
+              clientEmail: parsedData.clientEmail,
+              clientPhone: parsedData.clientPhone,
+              amount: parsedData.amount,
+              currency: parsedData.currency,
+              product: parsedData.product,
+              closer: senderName,
+              closerPhone: senderPhone,
+              proofUrl,
+              createdAt: saleData.createdAt,
+            }
+          })
+        });
+        console.log('🔔 Webhook de salida enviado');
+      } catch (e) {
+        console.error('Error enviando webhook de salida:', e);
+      }
+    }
+
+    return NextResponse.json({
+      status: 'success',
       saleId: docRef.id,
       data: {
         client: parsedData.clientName,
         amount: parsedData.amount,
         currency: parsedData.currency,
         product: parsedData.product,
+        proofUrl: proofUrl ? 'attached' : 'none',
       }
     });
-    
+
   } catch (error) {
     console.error('❌ Error procesando webhook:', error);
     return NextResponse.json({ status: 'error', message: String(error) }, { status: 500 });
@@ -180,15 +254,15 @@ async function updateCloserStats(phone: string, name: string, amount: number, cu
   const closersRef = collection(db, 'closers');
   const q = query(closersRef, where('phone', '==', phone));
   const snapshot = await getDocs(q);
-  
-  // Convertir a USD si es necesario (aproximación)
+
+  // Convertir a USD si es necesario
   let amountUsd = amount;
   if (currency === 'ARS') {
     amountUsd = amount / 1000; // Ajustar según tipo de cambio
   } else if (currency === 'EUR') {
     amountUsd = amount * 1.1;
   }
-  
+
   if (snapshot.empty) {
     // Crear nuevo closer
     await addDoc(closersRef, {
@@ -203,7 +277,7 @@ async function updateCloserStats(phone: string, name: string, amount: number, cu
     // Actualizar existente
     const closerDoc = snapshot.docs[0];
     await updateDoc(doc(db, 'closers', closerDoc.id), {
-      name, // Por si cambió
+      name,
       totalSales: increment(1),
       totalAmount: increment(amountUsd),
       lastSaleAt: new Date(),
@@ -213,9 +287,10 @@ async function updateCloserStats(phone: string, name: string, amount: number, cu
 
 // Endpoint para verificar el webhook
 export async function GET() {
-  return NextResponse.json({ 
-    status: 'ok', 
+  return NextResponse.json({
+    status: 'ok',
     message: 'Sales Tracker Webhook Active',
-    salesGroupJid: SALES_GROUP_JID ? 'configured' : 'NOT CONFIGURED'
+    salesGroupJid: SALES_GROUP_JID ? 'configured' : 'NOT CONFIGURED',
+    outgoingWebhook: OUTGOING_WEBHOOK_URL ? 'configured' : 'NOT CONFIGURED'
   });
 }
