@@ -63,6 +63,23 @@ export interface EvolutionWebhookPayload {
     };
     pushName: string;
     participantAlt?: string; // Número de teléfono real del remitente
+    // contextInfo viene a nivel de data cuando un mensaje tipo "conversation" cita otro mensaje
+    contextInfo?: {
+      stanzaId?: string;
+      participant?: string;
+      quotedMessage?: {
+        imageMessage?: {
+          url?: string;
+          mimetype?: string;
+          caption?: string;
+        };
+        documentMessage?: {
+          url?: string;
+          mimetype?: string;
+          fileName?: string;
+        };
+      };
+    };
     message: {
       conversation?: string;
       mediaUrl?: string; // URL directa del media (imagen o documento)

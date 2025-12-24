@@ -20,11 +20,32 @@ import { EvolutionWebhookPayload, Sale } from '@/types/sales';
 const SALES_GROUP_JID = process.env.SALES_GROUP_JID || '';
 const OUTGOING_WEBHOOK_URL = process.env.OUTGOING_WEBHOOK_URL || '';
 
+// Helper para guardar logs en Firestore (debug sin Netlify premium)
+async function saveDebugLog(type: string, message: string, data?: Record<string, unknown>) {
+  try {
+    const logsRef = collection(db, 'webhook_logs');
+    await addDoc(logsRef, {
+      type,
+      message,
+      data: data || {},
+      timestamp: new Date(),
+    });
+  } catch (e) {
+    // Silently fail - no queremos que los logs rompan el webhook
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const payload: EvolutionWebhookPayload = await request.json();
 
-    console.log('📨 Webhook received:', payload.event);
+    await saveDebugLog('webhook_received', payload.event, {
+      messageType: payload.data?.messageType,
+      hasMediaUrl: !!payload.data?.message?.mediaUrl,
+      hasImageMessage: !!payload.data?.message?.imageMessage,
+      hasConversation: !!payload.data?.message?.conversation,
+      hasContextInfo: !!payload.data?.contextInfo,
+    });
 
     // Solo procesar mensajes
     if (payload.event !== 'messages.upsert' && payload.event !== 'MESSAGES_UPSERT') {
@@ -46,41 +67,42 @@ export async function POST(request: NextRequest) {
     const messageTimestamp = data.messageTimestamp;
 
     // Caso 1: Es un mensaje con imagen/documento (comprobante)
-    // La URL está en data.message.mediaUrl para ambos tipos
-    // Se detecta el tipo por imageMessage.mimetype (image/jpeg) o documentMessage (application/pdf)
-    if (data.message?.imageMessage || data.message?.documentMessage || data.message?.mediaUrl) {
-      // mediaUrl está directamente en data.message.mediaUrl
-      const mediaUrl = data.message?.mediaUrl ||
-                       data.message?.imageMessage?.url ||
-                       data.message?.imageMessage?.mediaUrl ||
-                       data.message?.documentMessage?.url ||
-                       data.message?.documentMessage?.mediaUrl || '';
+    // La URL correcta está en data.message.mediaUrl (provista por Evolution API)
+    const hasMedia = data.message?.imageMessage || data.message?.documentMessage;
+    const mediaUrl = data.message?.mediaUrl || '';
 
+    await saveDebugLog('check_media', 'Verificando si es media', {
+      hasImageMessage: !!data.message?.imageMessage,
+      hasDocumentMessage: !!data.message?.documentMessage,
+      hasMediaUrl: !!mediaUrl,
+      mediaUrl: mediaUrl?.substring(0, 100), // Solo primeros 100 chars
+      messageId,
+    });
+
+    if (hasMedia && mediaUrl) {
       // Detectar tipo por mimetype del imageMessage o documentMessage
       const mimetype = data.message?.imageMessage?.mimetype ||
                        data.message?.documentMessage?.mimetype || '';
       const isImage = mimetype.startsWith('image/');
       const caption = data.message?.imageMessage?.caption || '';
 
-      if (mediaUrl) {
-        // Guardar comprobante en Firestore (colección 'proofs')
-        const proofsRef = collection(db, 'proofs');
-        await addDoc(proofsRef, {
-          messageId,
-          mediaUrl,
-          mediaType: isImage ? 'image' : 'document',
-          mimetype,
-          caption,
-          senderPhone,
-          senderName,
-          groupJid,
-          timestamp: new Date(messageTimestamp * 1000),
-          createdAt: new Date(),
-          linkedToSale: false, // Se actualiza cuando se vincula a una venta
-        });
+      // Guardar comprobante en Firestore (colección 'proofs')
+      const proofsRef = collection(db, 'proofs');
+      await addDoc(proofsRef, {
+        messageId,
+        mediaUrl,
+        mediaType: isImage ? 'image' : 'document',
+        mimetype,
+        caption,
+        senderPhone,
+        senderName,
+        groupJid,
+        timestamp: new Date(messageTimestamp * 1000),
+        createdAt: new Date(),
+        linkedToSale: false,
+      });
 
-        console.log('📎 Comprobante guardado en Firestore:', messageId);
-      }
+      await saveDebugLog('proof_saved', 'Comprobante guardado', { messageId, mediaUrl: mediaUrl.substring(0, 100) });
 
       return NextResponse.json({ status: 'proof_saved', messageId });
     }
@@ -89,26 +111,52 @@ export async function POST(request: NextRequest) {
     const messageText = data.message?.conversation ||
                         data.message?.extendedTextMessage?.text || '';
 
+    await saveDebugLog('check_text', 'Verificando si es reporte', {
+      hasConversation: !!data.message?.conversation,
+      hasExtendedText: !!data.message?.extendedTextMessage?.text,
+      textLength: messageText?.length || 0,
+      isSaleReport: messageText ? isSaleReport(messageText) : false,
+      textPreview: messageText?.substring(0, 100),
+    });
+
     if (!messageText || !isSaleReport(messageText)) {
       return NextResponse.json({ status: 'ignored', reason: 'not a sale report' });
     }
 
-    console.log('📝 Procesando reporte de venta de:', senderName);
+    await saveDebugLog('processing_sale', 'Procesando reporte de venta', { senderName, senderPhone });
 
     // Parsear el mensaje
     const parsedData = parseSaleMessage(messageText);
 
     if (!parsedData) {
+      await saveDebugLog('parse_failed', 'Fallo al parsear mensaje', { textPreview: messageText.substring(0, 200) });
       return NextResponse.json({ status: 'error', reason: 'failed to parse message' });
     }
+
+    await saveDebugLog('parsed_ok', 'Mensaje parseado correctamente', {
+      clientName: parsedData.clientName,
+      amount: parsedData.amount,
+      product: parsedData.product,
+    });
 
     // Buscar el comprobante asociado
     let proofUrl = '';
     let proofType: 'image' | 'pdf' = 'image';
-    let proofMessageId = '';
 
-    // Opción 1: Buscar por mensaje citado (quotedMessageId)
-    const quotedMessageId = data.message?.extendedTextMessage?.contextInfo?.stanzaId;
+    // Obtener contextInfo - puede venir en dos ubicaciones diferentes:
+    // 1. En data.contextInfo (cuando es mensaje tipo "conversation" citando algo)
+    // 2. En data.message.extendedTextMessage.contextInfo (cuando es extendedTextMessage)
+    const contextInfo = data.contextInfo || data.message?.extendedTextMessage?.contextInfo;
+
+    // El stanzaId es el ID del mensaje citado (la imagen/documento)
+    // Lo guardamos SIEMPRE para poder cruzar datos después
+    const quotedMessageId = contextInfo?.stanzaId || '';
+
+    await saveDebugLog('context_info', 'Buscando contextInfo', {
+      hasDataContextInfo: !!data.contextInfo,
+      hasExtendedContextInfo: !!data.message?.extendedTextMessage?.contextInfo,
+      stanzaId: quotedMessageId,
+    });
 
     if (quotedMessageId) {
       // Buscar en la colección de proofs
@@ -116,32 +164,28 @@ export async function POST(request: NextRequest) {
       const proofQuery = query(proofsRef, where('messageId', '==', quotedMessageId));
       const proofSnapshot = await getDocs(proofQuery);
 
+      await saveDebugLog('proof_search', 'Búsqueda de proof por stanzaId', {
+        quotedMessageId,
+        proofsFound: proofSnapshot.size,
+      });
+
       if (!proofSnapshot.empty) {
         const proofDoc = proofSnapshot.docs[0];
         const proofData = proofDoc.data();
         proofUrl = proofData.mediaUrl;
         proofType = proofData.mediaType === 'image' ? 'image' : 'pdf';
-        proofMessageId = proofData.messageId;
 
         // Marcar como vinculado
         await updateDoc(doc(db, 'proofs', proofDoc.id), { linkedToSale: true });
-        console.log('✅ Comprobante vinculado desde Firestore');
+        await saveDebugLog('proof_linked', 'Comprobante vinculado', { quotedMessageId, proofUrl: proofUrl?.substring(0, 100) });
+      } else {
+        await saveDebugLog('proof_not_found', 'No se encontró proof', { quotedMessageId });
       }
+    } else {
+      await saveDebugLog('no_quoted', 'No hay mensaje citado (stanzaId)', {});
     }
 
-    // Opción 2: Si el mensaje citado tiene imagen/documento directamente en el payload
-    const quotedMessage = data.message?.extendedTextMessage?.contextInfo?.quotedMessage;
-    if (!proofUrl && quotedMessage) {
-      if (quotedMessage.imageMessage?.url) {
-        proofUrl = quotedMessage.imageMessage.url;
-        proofType = 'image';
-      } else if (quotedMessage.documentMessage?.url) {
-        proofUrl = quotedMessage.documentMessage.url;
-        proofType = 'pdf';
-      }
-    }
-
-    // Opción 3: Buscar el último comprobante del mismo sender en los últimos 10 minutos
+    // Opción 2: Buscar el último comprobante del mismo sender en los últimos 10 minutos
     if (!proofUrl) {
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
       const proofsRef = collection(db, 'proofs');
@@ -161,10 +205,9 @@ export async function POST(request: NextRequest) {
           const proofData = proofDoc.data();
           proofUrl = proofData.mediaUrl;
           proofType = proofData.mediaType === 'image' ? 'image' : 'pdf';
-          proofMessageId = proofData.messageId;
 
           await updateDoc(doc(db, 'proofs', proofDoc.id), { linkedToSale: true });
-          console.log('✅ Comprobante reciente vinculado automáticamente');
+          await saveDebugLog('proof_recent_linked', 'Comprobante reciente vinculado', { proofUrl: proofUrl?.substring(0, 100) });
         }
       } catch (e) {
         // Si falla el query compuesto (índice faltante), continuar sin comprobante
@@ -188,7 +231,7 @@ export async function POST(request: NextRequest) {
       extras: parsedData.extras,
       proofUrl,
       proofType,
-      proofMessageId,
+      proofMessageId: quotedMessageId, // Siempre guardar el stanzaId para cruzar datos
       rawMessage: messageText,
       groupJid,
       messageId,
@@ -204,7 +247,12 @@ export async function POST(request: NextRequest) {
     const salesRef = collection(db, 'sales');
     const docRef = await addDoc(salesRef, saleData);
 
-    console.log('💾 Venta guardada:', docRef.id);
+    await saveDebugLog('sale_saved', 'Venta guardada exitosamente', {
+      saleId: docRef.id,
+      clientName: parsedData.clientName,
+      amount: parsedData.amount,
+      hasProofUrl: !!proofUrl,
+    });
 
     // Actualizar stats del closer
     await updateCloserStats(senderPhone, senderName, parsedData.amount, parsedData.currency);
@@ -251,7 +299,19 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('❌ Error procesando webhook:', error);
+    // Guardar error en Firestore para debug
+    try {
+      const logsRef = collection(db, 'webhook_logs');
+      await addDoc(logsRef, {
+        type: 'error',
+        message: 'Error procesando webhook',
+        error: String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date(),
+      });
+    } catch (e) {
+      // Ignorar si falla el log
+    }
     return NextResponse.json({ status: 'error', message: String(error) }, { status: 500 });
   }
 }
