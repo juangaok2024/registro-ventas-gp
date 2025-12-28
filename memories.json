@@ -221,7 +221,25 @@
       "lastAccessed": "2025-12-28T21:45:43.141Z",
       "lastVerified": "2025-12-28T21:45:43.141Z",
       "status": "fresh"
+    },
+    {
+      "id": "mem_1766962209159_fu3goojec",
+      "content": "Fixed modal close bug in MessageBubble.tsx by moving SaleDetailModal OUTSIDE the clickable div using React Fragment (<>). The bug was caused by event propagation - when clicking modal overlay to close, the click propagated to parent div which had onClick={handleClick} that reopened the modal. Solution: wrap component in Fragment, close the clickable div before the modal.",
+      "type": "error",
+      "tags": [
+        "error",
+        "react",
+        "registro_ventas_gp",
+        "bug-fix",
+        "modal",
+        "event-propagation"
+      ],
+      "timestamp": "2025-12-28T22:50:09.159Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T22:50:09.159Z",
+      "lastVerified": "2025-12-28T22:50:09.159Z",
+      "status": "fresh"
     }
   ],
-  "lastUpdated": "2025-12-28T21:45:43.141Z"
+  "lastUpdated": "2025-12-28T22:50:09.159Z"
 }

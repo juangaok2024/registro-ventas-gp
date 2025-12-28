@@ -257,6 +257,22 @@
   background: linear-gradient(90deg, hsl(var(--primary) / 0.05), transparent);
 }
 
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Monospace font for numbers */
+.font-mono-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
 
 
 @layer base {
