@@ -1,7 +1,7 @@
 // app/page.tsx
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   DollarSign,
   Users,
@@ -19,9 +19,14 @@ import {
   MessageSquare,
   ArrowUpRight,
   Sparkles,
-  Eye,
   MoreHorizontal,
-  LogOut
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ArrowUpDown,
+  Filter
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -61,9 +66,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface Sale {
   id: string;
@@ -108,11 +119,19 @@ export default function Dashboard() {
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
+  // Pagination state for sales
+  const [salesPage, setSalesPage] = useState(1);
+  const [salesPerPage, setSalesPerPage] = useState(10);
+
+  // Pagination state for closers
+  const [closersPage, setClosersPage] = useState(1);
+  const closersPerPage = 5;
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [salesRes, closersRes] = await Promise.all([
-        fetch('/api/sales?limit=100'),
+        fetch('/api/sales?limit=500'),
         fetch('/api/closers')
       ]);
 
@@ -140,41 +159,64 @@ export default function Dashboard() {
   };
 
   // Filter sales by date
-  const filteredSales = sales.filter(sale => {
-    if (dateFilter === 'all') return true;
+  const filteredSales = useMemo(() => {
+    return sales.filter(sale => {
+      if (dateFilter === 'all') return true;
 
-    const saleDate = new Date(sale.createdAt);
-    const now = new Date();
+      const saleDate = new Date(sale.createdAt);
+      const now = new Date();
 
-    switch (dateFilter) {
-      case 'today':
-        return isWithinInterval(saleDate, {
-          start: startOfDay(now),
-          end: endOfDay(now)
-        });
-      case 'yesterday':
-        const yesterday = subDays(now, 1);
-        return isWithinInterval(saleDate, {
-          start: startOfDay(yesterday),
-          end: endOfDay(yesterday)
-        });
-      case 'week':
-        return isWithinInterval(saleDate, {
-          start: startOfDay(subDays(now, 7)),
-          end: endOfDay(now)
-        });
-      case 'month':
-        return isWithinInterval(saleDate, {
-          start: startOfDay(subDays(now, 30)),
-          end: endOfDay(now)
-        });
-      default:
-        return true;
-    }
-  });
+      switch (dateFilter) {
+        case 'today':
+          return isWithinInterval(saleDate, {
+            start: startOfDay(now),
+            end: endOfDay(now)
+          });
+        case 'yesterday':
+          const yesterday = subDays(now, 1);
+          return isWithinInterval(saleDate, {
+            start: startOfDay(yesterday),
+            end: endOfDay(yesterday)
+          });
+        case 'week':
+          return isWithinInterval(saleDate, {
+            start: startOfDay(subDays(now, 7)),
+            end: endOfDay(now)
+          });
+        case 'month':
+          return isWithinInterval(saleDate, {
+            start: startOfDay(subDays(now, 30)),
+            end: endOfDay(now)
+          });
+        default:
+          return true;
+      }
+    });
+  }, [sales, dateFilter]);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setSalesPage(1);
+  }, [dateFilter]);
+
+  // Paginated sales
+  const paginatedSales = useMemo(() => {
+    const start = (salesPage - 1) * salesPerPage;
+    return filteredSales.slice(start, start + salesPerPage);
+  }, [filteredSales, salesPage, salesPerPage]);
+
+  const totalSalesPages = Math.ceil(filteredSales.length / salesPerPage);
+
+  // Paginated closers
+  const paginatedClosers = useMemo(() => {
+    const start = (closersPage - 1) * closersPerPage;
+    return closers.slice(start, start + closersPerPage);
+  }, [closers, closersPage]);
+
+  const totalClosersPages = Math.ceil(closers.length / closersPerPage);
 
   // Calculate metrics
-  const totalSales = filteredSales.length;
+  const totalSalesCount = filteredSales.length;
   const totalRevenue = filteredSales.reduce((acc, sale) => {
     if (sale.currency === 'USD') return acc + sale.amount;
     if (sale.currency === 'ARS') return acc + (sale.amount / 1000);
@@ -182,7 +224,7 @@ export default function Dashboard() {
   }, 0);
   const pendingSales = filteredSales.filter(s => s.status === 'pending').length;
   const verifiedSales = filteredSales.filter(s => s.status === 'verified').length;
-  const verificationRate = totalSales > 0 ? Math.round((verifiedSales / totalSales) * 100) : 0;
+  const verificationRate = totalSalesCount > 0 ? Math.round((verifiedSales / totalSalesCount) * 100) : 0;
 
   const handleVerify = async (saleId: string, verified: boolean) => {
     setVerifyingId(saleId);
@@ -230,351 +272,423 @@ export default function Dashboard() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5">
-        {/* Decorative background */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-3xl" />
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-3xl" />
-        </div>
+      <div className="min-h-screen bg-[#0a0a0b]">
+        {/* Subtle gradient background */}
+        <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-emerald-500/5 pointer-events-none" />
 
         <div className="relative z-10">
           {/* Header */}
-          <header className="sticky top-0 z-40 border-b border-border/40 bg-background/80 backdrop-blur-xl">
-            <div className="max-w-[1600px] mx-auto px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center shadow-lg shadow-primary/20">
-                    <Sparkles className="w-5 h-5 text-primary-foreground" />
+          <header className="sticky top-0 z-40 border-b border-white/5 bg-[#0a0a0b]/80 backdrop-blur-xl">
+            <div className="max-w-[1800px] mx-auto px-4 lg:px-8 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                    <Sparkles className="w-5 h-5 text-white" />
                   </div>
-                  <div>
-                    <h1 className="text-xl font-bold tracking-tight">Sales Tracker</h1>
-                    <p className="text-sm text-muted-foreground">Factor Studios</p>
+                  <div className="hidden sm:block">
+                    <h1 className="text-base font-semibold text-white">Sales Tracker</h1>
+                    <p className="text-xs text-white/50">Factor Studios</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <Tabs value={dateFilter} onValueChange={(v) => setDateFilter(v as DateFilter)}>
-                    <TabsList className="bg-secondary/50">
-                      <TabsTrigger value="all" className="text-xs">Todas</TabsTrigger>
-                      <TabsTrigger value="today" className="text-xs">Hoy</TabsTrigger>
-                      <TabsTrigger value="week" className="text-xs">7 dias</TabsTrigger>
-                      <TabsTrigger value="month" className="text-xs">30 dias</TabsTrigger>
+                    <TabsList className="h-8 bg-white/5 border border-white/10">
+                      <TabsTrigger value="all" className="text-xs h-6 px-2.5">Todas</TabsTrigger>
+                      <TabsTrigger value="today" className="text-xs h-6 px-2.5">Hoy</TabsTrigger>
+                      <TabsTrigger value="week" className="text-xs h-6 px-2.5">7d</TabsTrigger>
+                      <TabsTrigger value="month" className="text-xs h-6 px-2.5">30d</TabsTrigger>
                     </TabsList>
                   </Tabs>
 
-                  <Separator orientation="vertical" className="h-8" />
+                  <div className="hidden sm:flex items-center gap-2">
+                    <Separator orientation="vertical" className="h-6 bg-white/10" />
 
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/chat">
-                      <MessageSquare className="w-4 h-4 mr-2" />
-                      Chat
-                    </Link>
-                  </Button>
+                    <Button variant="ghost" size="sm" className="h-8 text-white/70 hover:text-white hover:bg-white/5" asChild>
+                      <Link href="/chat">
+                        <MessageSquare className="w-4 h-4 mr-1.5" />
+                        Chat
+                      </Link>
+                    </Button>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={fetchData}
-                        disabled={loading}
-                      >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Actualizar datos</TooltipContent>
-                  </Tooltip>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/5"
+                      onClick={fetchData}
+                      disabled={loading}
+                    >
+                      <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    </Button>
 
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={handleLogout} className="text-destructive">
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Cerrar sesion
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-white/70 hover:text-white hover:bg-white/5">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-[#141416] border-white/10">
+                        <DropdownMenuItem onClick={handleLogout} className="text-red-400 focus:text-red-400 focus:bg-red-500/10">
+                          <LogOut className="w-4 h-4 mr-2" />
+                          Cerrar sesion
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </div>
             </div>
           </header>
 
-          <main className="max-w-[1600px] mx-auto px-6 py-8">
+          <main className="max-w-[1800px] mx-auto px-4 lg:px-8 py-6">
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-              {/* Revenue Card - Featured */}
-              <Card className="lg:col-span-2 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/20 overflow-hidden relative">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-primary" />
-                    Revenue Total
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-end justify-between">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+              {/* Revenue Card */}
+              <Card className="col-span-2 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent border-emerald-500/20 overflow-hidden">
+                <CardContent className="p-4 lg:p-6">
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-4xl font-bold tracking-tight">
-                        ${totalRevenue.toLocaleString()}
+                      <p className="text-xs font-medium text-emerald-400/80 uppercase tracking-wider mb-1">
+                        Revenue Total
                       </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        USD equivalente
+                      <p className="text-2xl lg:text-4xl font-bold text-white tracking-tight">
+                        ${totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                       </p>
+                      <p className="text-xs text-white/40 mt-1">USD equivalente</p>
                     </div>
-                    <div className="flex items-center gap-1 text-emerald-400 text-sm font-medium bg-emerald-500/10 px-2 py-1 rounded-full">
-                      <ArrowUpRight className="w-4 h-4" />
-                      {totalSales} ventas
+                    <div className="flex items-center gap-1 text-emerald-400 text-xs font-medium bg-emerald-500/10 px-2 py-1 rounded-full border border-emerald-500/20">
+                      <ArrowUpRight className="w-3 h-3" />
+                      {totalSalesCount} ventas
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               {/* Pending Card */}
-              <Card className="border-amber-500/20 bg-gradient-to-br from-amber-500/5 to-transparent">
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-amber-400" />
-                    Pendientes
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-3xl font-bold text-amber-400">{pendingSales}</p>
-                  <p className="text-sm text-muted-foreground mt-1">por verificar</p>
+              <Card className="bg-[#141416] border-white/5 hover:border-amber-500/20 transition-colors">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                      <Clock className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <span className="text-xs font-medium text-white/50 uppercase tracking-wider">Pendientes</span>
+                  </div>
+                  <p className="text-2xl lg:text-3xl font-bold text-amber-400">{pendingSales}</p>
+                  <p className="text-xs text-white/30 mt-1">por verificar</p>
                 </CardContent>
               </Card>
 
               {/* Verified Card */}
-              <Card className="border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-transparent">
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    Verificadas
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-end justify-between">
-                    <div>
-                      <p className="text-3xl font-bold text-emerald-400">{verifiedSales}</p>
-                      <p className="text-sm text-muted-foreground mt-1">{verificationRate}% del total</p>
+              <Card className="bg-[#141416] border-white/5 hover:border-emerald-500/20 transition-colors">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                     </div>
+                    <span className="text-xs font-medium text-white/50 uppercase tracking-wider">Verificadas</span>
                   </div>
-                  <Progress value={verificationRate} className="h-1.5 mt-3" />
+                  <p className="text-2xl lg:text-3xl font-bold text-emerald-400">{verifiedSales}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Progress value={verificationRate} className="h-1 flex-1 bg-white/5" />
+                    <span className="text-xs text-white/40">{verificationRate}%</span>
+                  </div>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
               {/* Sales Table */}
-              <Card className="xl:col-span-2">
-                <CardHeader className="pb-4">
-                  <div className="flex items-center justify-between">
+              <Card className="xl:col-span-3 bg-[#141416] border-white/5">
+                <CardHeader className="p-4 pb-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <CardTitle className="text-lg">Ultimas Ventas</CardTitle>
-                      <CardDescription>{filteredSales.length} registros</CardDescription>
+                      <CardTitle className="text-base font-semibold text-white">Ventas</CardTitle>
+                      <CardDescription className="text-white/40">
+                        {filteredSales.length} registros en total
+                      </CardDescription>
                     </div>
-                    {dateFilter !== 'all' && (
-                      <Badge variant="secondary" className="font-normal">
-                        <Calendar className="w-3 h-3 mr-1" />
-                        {dateFilter === 'today' ? 'Hoy' :
-                         dateFilter === 'week' ? 'Ultimos 7 dias' :
-                         'Ultimos 30 dias'}
-                      </Badge>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-white/40">Mostrar:</span>
+                      <Select
+                        value={salesPerPage.toString()}
+                        onValueChange={(v) => {
+                          setSalesPerPage(Number(v));
+                          setSalesPage(1);
+                        }}
+                      >
+                        <SelectTrigger className="w-[70px] h-8 text-xs bg-white/5 border-white/10 text-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#1a1a1c] border-white/10">
+                          <SelectItem value="5">5</SelectItem>
+                          <SelectItem value="10">10</SelectItem>
+                          <SelectItem value="20">20</SelectItem>
+                          <SelectItem value="50">50</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </CardHeader>
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[500px]">
-                    {loading ? (
-                      <div className="p-6 space-y-4">
-                        {[...Array(5)].map((_, i) => (
-                          <div key={i} className="flex items-center gap-4">
-                            <Skeleton className="h-10 w-10 rounded-full" />
-                            <div className="space-y-2 flex-1">
-                              <Skeleton className="h-4 w-1/3" />
-                              <Skeleton className="h-3 w-1/4" />
-                            </div>
-                            <Skeleton className="h-6 w-20" />
-                          </div>
-                        ))}
-                      </div>
-                    ) : filteredSales.length === 0 ? (
-                      <div className="p-12 text-center">
-                        <div className="w-16 h-16 mx-auto rounded-full bg-muted flex items-center justify-center mb-4">
-                          <TrendingUp className="w-8 h-8 text-muted-foreground" />
-                        </div>
-                        <p className="text-muted-foreground">
-                          No hay ventas {dateFilter !== 'all' ? 'en este periodo' : 'registradas'}
-                        </p>
-                      </div>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead className="w-[200px]">Cliente</TableHead>
-                            <TableHead>Closer</TableHead>
-                            <TableHead>Producto</TableHead>
-                            <TableHead className="text-right">Monto</TableHead>
-                            <TableHead className="text-center w-[120px]">Estado</TableHead>
-                            <TableHead className="text-right">Fecha</TableHead>
+                <CardContent className="p-0 mt-4">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-white/5 hover:bg-transparent">
+                          <TableHead className="text-white/50 font-medium text-xs w-[180px]">Cliente</TableHead>
+                          <TableHead className="text-white/50 font-medium text-xs w-[140px]">Closer</TableHead>
+                          <TableHead className="text-white/50 font-medium text-xs w-[120px]">Producto</TableHead>
+                          <TableHead className="text-white/50 font-medium text-xs text-right w-[100px]">Monto</TableHead>
+                          <TableHead className="text-white/50 font-medium text-xs text-center w-[100px]">Estado</TableHead>
+                          <TableHead className="text-white/50 font-medium text-xs text-right w-[120px]">Fecha</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {loading ? (
+                          [...Array(salesPerPage)].map((_, i) => (
+                            <TableRow key={i} className="border-white/5">
+                              <TableCell><Skeleton className="h-4 w-32 bg-white/5" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-24 bg-white/5" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-16 bg-white/5" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-16 ml-auto bg-white/5" /></TableCell>
+                              <TableCell><Skeleton className="h-6 w-20 mx-auto bg-white/5" /></TableCell>
+                              <TableCell><Skeleton className="h-4 w-20 ml-auto bg-white/5" /></TableCell>
+                            </TableRow>
+                          ))
+                        ) : paginatedSales.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="h-32 text-center">
+                              <div className="flex flex-col items-center justify-center text-white/30">
+                                <TrendingUp className="w-8 h-8 mb-2 opacity-50" />
+                                <p>No hay ventas {dateFilter !== 'all' ? 'en este periodo' : ''}</p>
+                              </div>
+                            </TableCell>
                           </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredSales.map((sale) => (
+                        ) : (
+                          paginatedSales.map((sale) => (
                             <TableRow
                               key={sale.id}
-                              className="cursor-pointer group"
+                              className="border-white/5 cursor-pointer hover:bg-white/[0.02] group"
                               onClick={() => setSelectedSale(sale)}
                             >
-                              <TableCell>
-                                <div className="flex items-center gap-3">
-                                  {sale.proofUrl && (
-                                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <TableCell className="py-3">
+                                <div className="flex items-center gap-2">
+                                  {sale.proofUrl ? (
+                                    <div className="w-7 h-7 rounded bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
                                       {sale.proofType === 'image'
-                                        ? <ImageIcon className="w-4 h-4 text-primary" />
-                                        : <FileText className="w-4 h-4 text-primary" />
+                                        ? <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                                        : <FileText className="w-3.5 h-3.5 text-emerald-400" />
                                       }
                                     </div>
+                                  ) : (
+                                    <div className="w-7 h-7 rounded bg-white/5 flex items-center justify-center flex-shrink-0">
+                                      <span className="text-xs text-white/30">-</span>
+                                    </div>
                                   )}
-                                  <span className="font-medium group-hover:text-primary transition-colors">
+                                  <span className="text-sm font-medium text-white/90 truncate max-w-[120px] group-hover:text-emerald-400 transition-colors">
                                     {sale.clientName}
                                   </span>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-muted-foreground">
+                              <TableCell className="text-sm text-white/50 truncate max-w-[140px]">
                                 {sale.closerName}
                               </TableCell>
                               <TableCell>
-                                <Badge variant="outline" className="font-normal">
+                                <Badge variant="outline" className="text-xs font-normal border-white/10 text-white/60 bg-white/5">
                                   {sale.product}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-right font-mono font-semibold text-primary">
-                                {formatCurrency(sale.amount, sale.currency)}
+                              <TableCell className="text-right">
+                                <span className="text-sm font-semibold text-emerald-400 font-mono">
+                                  {formatCurrency(sale.amount, sale.currency)}
+                                </span>
                               </TableCell>
                               <TableCell onClick={e => e.stopPropagation()}>
-                                <div className="flex items-center justify-center gap-1">
+                                <div className="flex items-center justify-center gap-0.5">
                                   {sale.status === 'pending' ? (
                                     <>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-                                            onClick={() => handleVerify(sale.id, true)}
-                                            disabled={verifyingId === sale.id}
-                                          >
-                                            <Check className="w-4 h-4" />
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Verificar</TooltipContent>
-                                      </Tooltip>
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                            onClick={() => handleVerify(sale.id, false)}
-                                            disabled={verifyingId === sale.id}
-                                          >
-                                            <X className="w-4 h-4" />
-                                          </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent>Rechazar</TooltipContent>
-                                      </Tooltip>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                                        onClick={() => handleVerify(sale.id, true)}
+                                        disabled={verifyingId === sale.id}
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                        onClick={() => handleVerify(sale.id, false)}
+                                        disabled={verifyingId === sale.id}
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </Button>
                                     </>
                                   ) : (
                                     <StatusBadge status={sale.status} />
                                   )}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right text-sm text-muted-foreground">
+                              <TableCell className="text-right text-xs text-white/40">
                                 {formatDistanceToNow(new Date(sale.createdAt), {
                                   addSuffix: true,
                                   locale: es
                                 })}
                               </TableCell>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </ScrollArea>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  {/* Pagination */}
+                  {!loading && filteredSales.length > 0 && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
+                      <p className="text-xs text-white/40">
+                        Mostrando {((salesPage - 1) * salesPerPage) + 1} - {Math.min(salesPage * salesPerPage, filteredSales.length)} de {filteredSales.length}
+                      </p>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/5"
+                          onClick={() => setSalesPage(1)}
+                          disabled={salesPage === 1}
+                        >
+                          <ChevronsLeft className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/5"
+                          onClick={() => setSalesPage(p => Math.max(1, p - 1))}
+                          disabled={salesPage === 1}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </Button>
+                        <span className="px-3 text-xs text-white/60">
+                          {salesPage} / {totalSalesPages}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/5"
+                          onClick={() => setSalesPage(p => Math.min(totalSalesPages, p + 1))}
+                          disabled={salesPage === totalSalesPages}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/5"
+                          onClick={() => setSalesPage(totalSalesPages)}
+                          disabled={salesPage === totalSalesPages}
+                        >
+                          <ChevronsRight className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
               {/* Closers Leaderboard */}
-              <Card>
-                <CardHeader>
+              <Card className="bg-[#141416] border-white/5">
+                <CardHeader className="p-4 pb-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl">🏆</span>
+                    <span className="text-xl">🏆</span>
                     <div>
-                      <CardTitle className="text-lg">Ranking Closers</CardTitle>
-                      <CardDescription>Top performers</CardDescription>
+                      <CardTitle className="text-base font-semibold text-white">Ranking</CardTitle>
+                      <CardDescription className="text-white/40 text-xs">{closers.length} closers</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="p-4 pt-0 space-y-2">
                   {loading ? (
-                    <div className="space-y-3">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <Skeleton className="h-10 w-10 rounded-full" />
-                          <div className="space-y-2 flex-1">
-                            <Skeleton className="h-4 w-2/3" />
-                            <Skeleton className="h-3 w-1/3" />
-                          </div>
+                    [...Array(closersPerPage)].map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 p-2">
+                        <Skeleton className="h-9 w-9 rounded-full bg-white/5" />
+                        <div className="flex-1 space-y-1.5">
+                          <Skeleton className="h-3 w-24 bg-white/5" />
+                          <Skeleton className="h-2 w-16 bg-white/5" />
                         </div>
-                      ))}
-                    </div>
-                  ) : closers.length === 0 ? (
-                    <div className="py-8 text-center">
-                      <Users className="w-12 h-12 mx-auto text-muted-foreground/30 mb-3" />
-                      <p className="text-muted-foreground">Sin datos de closers</p>
-                    </div>
-                  ) : (
-                    closers.map((closer, index) => (
-                      <div
-                        key={closer.id}
-                        className={`flex items-center gap-3 p-3 rounded-xl transition-all hover:scale-[1.02] ${
-                          index === 0 ? 'bg-gradient-to-r from-yellow-500/15 to-transparent border border-yellow-500/20' :
-                          index === 1 ? 'bg-gradient-to-r from-gray-400/10 to-transparent border border-gray-400/20' :
-                          index === 2 ? 'bg-gradient-to-r from-orange-600/10 to-transparent border border-orange-600/20' :
-                          'bg-secondary/30 border border-transparent'
-                        }`}
-                      >
-                        <Avatar className={`w-10 h-10 ${
-                          index === 0 ? 'ring-2 ring-yellow-500/50' :
-                          index === 1 ? 'ring-2 ring-gray-400/50' :
-                          index === 2 ? 'ring-2 ring-orange-600/50' : ''
-                        }`}>
-                          <AvatarFallback className={`font-bold text-lg ${
-                            index === 0 ? 'bg-yellow-500/20 text-yellow-400' :
-                            index === 1 ? 'bg-gray-400/20 text-gray-300' :
-                            index === 2 ? 'bg-orange-600/20 text-orange-400' :
-                            'bg-secondary text-muted-foreground'
-                          }`}>
-                            {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{closer.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {closer.totalSales} venta{closer.totalSales !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-mono font-bold text-primary">
-                            ${closer.totalAmount.toLocaleString()}
-                          </p>
-                        </div>
+                        <Skeleton className="h-4 w-16 bg-white/5" />
                       </div>
                     ))
+                  ) : closers.length === 0 ? (
+                    <div className="py-8 text-center">
+                      <Users className="w-10 h-10 mx-auto text-white/20 mb-2" />
+                      <p className="text-white/30 text-sm">Sin datos</p>
+                    </div>
+                  ) : (
+                    <>
+                      {paginatedClosers.map((closer, index) => {
+                        const globalIndex = (closersPage - 1) * closersPerPage + index;
+                        return (
+                          <div
+                            key={closer.id}
+                            className={`flex items-center gap-3 p-2.5 rounded-lg transition-all ${
+                              globalIndex === 0 ? 'bg-gradient-to-r from-yellow-500/10 to-transparent border border-yellow-500/20' :
+                              globalIndex === 1 ? 'bg-gradient-to-r from-gray-400/10 to-transparent border border-gray-400/20' :
+                              globalIndex === 2 ? 'bg-gradient-to-r from-orange-600/10 to-transparent border border-orange-600/20' :
+                              'bg-white/[0.02] border border-transparent hover:border-white/5'
+                            }`}
+                          >
+                            <Avatar className={`w-9 h-9 ${
+                              globalIndex === 0 ? 'ring-2 ring-yellow-500/50' :
+                              globalIndex === 1 ? 'ring-2 ring-gray-400/50' :
+                              globalIndex === 2 ? 'ring-2 ring-orange-500/50' : ''
+                            }`}>
+                              <AvatarFallback className={`text-sm font-bold ${
+                                globalIndex === 0 ? 'bg-yellow-500/20 text-yellow-400' :
+                                globalIndex === 1 ? 'bg-gray-400/20 text-gray-300' :
+                                globalIndex === 2 ? 'bg-orange-500/20 text-orange-400' :
+                                'bg-white/10 text-white/50'
+                              }`}>
+                                {globalIndex === 0 ? '🥇' : globalIndex === 1 ? '🥈' : globalIndex === 2 ? '🥉' : globalIndex + 1}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-white/90 truncate">{closer.name}</p>
+                              <p className="text-xs text-white/40">{closer.totalSales} venta{closer.totalSales !== 1 ? 's' : ''}</p>
+                            </div>
+                            <p className="text-sm font-bold text-emerald-400 font-mono">
+                              ${closer.totalAmount.toLocaleString()}
+                            </p>
+                          </div>
+                        );
+                      })}
+
+                      {/* Closers Pagination */}
+                      {totalClosersPages > 1 && (
+                        <div className="flex items-center justify-center gap-1 pt-2 mt-2 border-t border-white/5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/5"
+                            onClick={() => setClosersPage(p => Math.max(1, p - 1))}
+                            disabled={closersPage === 1}
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </Button>
+                          <span className="px-2 text-xs text-white/40">
+                            {closersPage} / {totalClosersPages}
+                          </span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-white/50 hover:text-white hover:bg-white/5"
+                            onClick={() => setClosersPage(p => Math.min(totalClosersPages, p + 1))}
+                            disabled={closersPage === totalClosersPages}
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -597,18 +711,18 @@ export default function Dashboard() {
 function StatusBadge({ status }: { status: 'pending' | 'verified' | 'rejected' }) {
   const config = {
     verified: {
-      label: 'Verificada',
-      className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25',
+      label: 'OK',
+      className: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
       icon: CheckCircle2
     },
     pending: {
-      label: 'Pendiente',
-      className: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+      label: 'Pend.',
+      className: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
       icon: Clock
     },
     rejected: {
-      label: 'Rechazada',
-      className: 'bg-red-500/15 text-red-400 border-red-500/25',
+      label: 'Rech.',
+      className: 'bg-red-500/15 text-red-400 border-red-500/30',
       icon: XCircle
     },
   };
@@ -616,8 +730,8 @@ function StatusBadge({ status }: { status: 'pending' | 'verified' | 'rejected' }
   const { label, className, icon: Icon } = config[status];
 
   return (
-    <Badge variant="outline" className={className}>
-      <Icon className="w-3 h-3 mr-1" />
+    <Badge variant="outline" className={`text-[10px] px-1.5 py-0.5 ${className}`}>
+      <Icon className="w-3 h-3 mr-0.5" />
       {label}
     </Badge>
   );
@@ -633,32 +747,31 @@ function SaleDetailDialog({ sale, onClose, onVerify, verifyingId }: {
 
   return (
     <Dialog open={!!sale} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden p-0">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden p-0 bg-[#141416] border-white/10">
         <ScrollArea className="max-h-[90vh]">
-          {/* Proof Preview */}
           {sale.proofUrl && (
             <div className="relative">
               {sale.proofType === 'image' ? (
                 <img
                   src={sale.proofUrl}
                   alt="Comprobante"
-                  className="w-full h-52 object-cover"
+                  className="w-full h-48 object-cover"
                 />
               ) : (
                 <a
                   href={sale.proofUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-6 bg-secondary/50 hover:bg-secondary transition-colors"
+                  className="flex items-center gap-3 p-5 bg-white/5 hover:bg-white/10 transition-colors"
                 >
-                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-primary" />
+                  <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-emerald-400" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium">Documento PDF</p>
-                    <p className="text-sm text-muted-foreground">Click para abrir</p>
+                    <p className="text-sm font-medium text-white">Documento PDF</p>
+                    <p className="text-xs text-white/50">Click para abrir</p>
                   </div>
-                  <ExternalLink className="w-5 h-5 text-muted-foreground" />
+                  <ExternalLink className="w-4 h-4 text-white/40" />
                 </a>
               )}
               <div className="absolute top-3 right-3">
@@ -667,79 +780,70 @@ function SaleDetailDialog({ sale, onClose, onVerify, verifyingId }: {
             </div>
           )}
 
-          <div className="p-6 space-y-6">
+          <div className="p-5 space-y-5">
             <DialogHeader className="p-0">
-              <DialogTitle className="text-xl">Detalle de Venta</DialogTitle>
+              <DialogTitle className="text-lg text-white">Detalle de Venta</DialogTitle>
             </DialogHeader>
 
-            {/* Amount Highlight */}
-            <div className="flex items-center justify-between p-4 rounded-xl bg-primary/5 border border-primary/20">
+            {/* Amount */}
+            <div className="flex items-center justify-between p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
               <div>
-                <p className="text-sm text-muted-foreground">Monto</p>
-                <p className="text-2xl font-bold font-mono text-primary">
+                <p className="text-xs text-white/50">Monto</p>
+                <p className="text-xl font-bold font-mono text-emerald-400">
                   {sale.currency === 'USD' ? '$' : sale.currency === 'ARS' ? 'ARS $' : 'EUR'}
                   {sale.amount.toLocaleString()}
                 </p>
               </div>
-              <DollarSign className="w-10 h-10 text-primary/30" />
+              <DollarSign className="w-8 h-8 text-emerald-500/30" />
             </div>
 
-            {/* Client Info */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Cliente
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
+            {/* Client */}
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Cliente</h4>
+              <div className="grid grid-cols-2 gap-2 text-sm">
                 <InfoField label="Nombre" value={sale.clientName} />
                 <InfoField label="Email" value={sale.clientEmail || '-'} />
                 <InfoField label="Telefono" value={sale.clientPhone || '-'} />
               </div>
             </div>
 
-            <Separator />
+            <Separator className="bg-white/5" />
 
             {/* Sale Details */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Detalles de Venta
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Detalles</h4>
+              <div className="grid grid-cols-2 gap-2 text-sm">
                 <InfoField label="Producto" value={sale.product} />
                 <InfoField label="Funnel" value={sale.funnel || '-'} />
-                <InfoField label="Medio de pago" value={sale.paymentMethod || '-'} />
+                <InfoField label="Medio" value={sale.paymentMethod || '-'} />
                 <InfoField label="Tipo" value={sale.paymentType || '-'} />
-                {sale.extras && (
-                  <div className="col-span-2">
-                    <InfoField label="Extras" value={sale.extras} />
-                  </div>
-                )}
               </div>
             </div>
 
-            <Separator />
+            <Separator className="bg-white/5" />
 
             {/* Closer */}
             <div className="flex items-center gap-3">
-              <Avatar>
-                <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+              <Avatar className="w-9 h-9">
+                <AvatarFallback className="bg-emerald-500/10 text-emerald-400 text-xs font-semibold">
                   {sale.closerName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div>
-                <p className="font-medium">{sale.closerName}</p>
-                <p className="text-sm text-muted-foreground">{sale.closerPhone}</p>
+                <p className="text-sm font-medium text-white">{sale.closerName}</p>
+                <p className="text-xs text-white/40">{sale.closerPhone}</p>
               </div>
             </div>
 
             {/* Actions */}
             {sale.status === 'pending' && (
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-2 pt-2">
                 <Button
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={() => onVerify(sale.id, true)}
                   disabled={verifyingId === sale.id}
                 >
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  <CheckCircle2 className="w-4 h-4 mr-1.5" />
                   Verificar
                 </Button>
                 <Button
@@ -748,23 +852,18 @@ function SaleDetailDialog({ sale, onClose, onVerify, verifyingId }: {
                   onClick={() => onVerify(sale.id, false)}
                   disabled={verifyingId === sale.id}
                 >
-                  <XCircle className="w-4 h-4 mr-2" />
+                  <XCircle className="w-4 h-4 mr-1.5" />
                   Rechazar
                 </Button>
               </div>
             )}
 
             {/* Timestamp */}
-            <div className="pt-2 text-sm text-muted-foreground">
-              <p className="flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
+            <div className="pt-2 text-xs text-white/40">
+              <p className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5" />
                 {format(new Date(sale.createdAt), "d 'de' MMMM, yyyy - HH:mm", { locale: es })}
               </p>
-              {sale.verifiedAt && (
-                <p className="mt-1 text-xs">
-                  Verificada: {format(new Date(sale.verifiedAt), "d MMM, HH:mm", { locale: es })}
-                </p>
-              )}
             </div>
           </div>
         </ScrollArea>
@@ -776,8 +875,8 @@ function SaleDetailDialog({ sale, onClose, onVerify, verifyingId }: {
 function InfoField({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="font-medium">{value}</p>
+      <p className="text-[10px] text-white/40">{label}</p>
+      <p className="text-sm text-white/80 truncate">{value}</p>
     </div>
   );
 }

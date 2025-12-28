@@ -184,7 +184,44 @@
       "lastAccessed": "2025-12-28T20:54:20.429Z",
       "lastVerified": "2025-12-28T20:54:20.429Z",
       "status": "fresh"
+    },
+    {
+      "id": "mem_1766957116804_tfoyhyi4i",
+      "content": "Chat improvements completed for Sales Tracker:\n\n1. **SaleDetailModal** (components/SaleDetailModal.tsx):\n   - Full-page modal using shadcn Dialog component\n   - Displays complete sale details: amount, client info, product, payment type, closer info\n   - Shows proof image from quotedMessage.mediaUrl or fetches from API\n   - Uses gradient header with prominent amount display\n   - Status badge with color-coded icons (verified/pending/rejected)\n   - Fetches additional data from /api/sales/[id] endpoint\n\n2. **API Endpoint** (app/api/sales/[id]/route.ts):\n   - New endpoint to fetch individual sale data by ID\n   - Returns full sale document from Firestore\n\n3. **MessageBubble Updates** (components/MessageBubble.tsx):\n   - Now uses SaleDetailModal instead of small SalePreviewCard popup\n   - Visual connection indicator: when a sale quotes a proof, it shows emerald-colored link with Link2 icon\n   - \"Toca para ver detalles completos\" hint on hover\n\n4. **Chat Page Improvements** (app/chat/page.tsx):\n   - Stats row with 3 cards: messages count, sales count, proofs count\n   - Better header with backdrop blur\n   - Improved filter dropdown using Card component\n   - Enhanced empty state with Card and better messaging\n   - Floating scroll button with rounded-2xl style\n\n5. **shadcn Components Installed**:\n   - dialog, card, badge, avatar, separator, scroll-area\n   - lib/utils.ts with cn() function\n   - components.json configuration",
+      "type": "config",
+      "tags": [
+        "config",
+        "api",
+        "sales-tracker",
+        "chat-improvements",
+        "shadcn",
+        "react",
+        "ui-components"
+      ],
+      "timestamp": "2025-12-28T21:25:16.804Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T21:25:16.804Z",
+      "lastVerified": "2025-12-28T21:25:16.804Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766958343141_gfyclpgds",
+      "content": "Problema resuelto en Sales Tracker: Los errores 503 en Next.js fueron causados por el caché .next corrupto. Solución: eliminar el directorio .next y reiniciar el servidor de desarrollo. El servidor se movió del puerto 3002 al 3005 porque había múltiples procesos de node atascados en los puertos anteriores.",
+      "type": "general",
+      "tags": [
+        "general",
+        "next.js",
+        "debug",
+        "503-error",
+        "cache",
+        "sales-tracker"
+      ],
+      "timestamp": "2025-12-28T21:45:43.141Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T21:45:43.141Z",
+      "lastVerified": "2025-12-28T21:45:43.141Z",
+      "status": "fresh"
     }
   ],
-  "lastUpdated": "2025-12-28T20:54:20.429Z"
+  "lastUpdated": "2025-12-28T21:45:43.141Z"
 }
