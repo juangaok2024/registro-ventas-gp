@@ -96,16 +96,14 @@ export async function POST(request: NextRequest) {
     // ========================================
     // PASO 1: Guardar SIEMPRE en colección 'messages'
     // ========================================
-    const chatMessage: Omit<ChatMessage, 'id'> = {
+    // Firestore no acepta undefined, solo incluir campos con valor
+    const chatMessage: Record<string, unknown> = {
       messageId,
       timestamp: new Date(messageTimestamp * 1000),
       senderPhone,
       senderName,
       type: messageType,
       content: messageText || caption || '',
-      mediaUrl: mediaUrl || undefined,
-      mimetype: mimetype || undefined,
-      quotedMessageId: quotedMessageId || undefined,
       classification: {
         isSale: false,
         isProof: false,
@@ -114,9 +112,14 @@ export async function POST(request: NextRequest) {
       processedAt: new Date(),
     };
 
+    // Solo agregar campos opcionales si tienen valor
+    if (mediaUrl) chatMessage.mediaUrl = mediaUrl;
+    if (mimetype) chatMessage.mimetype = mimetype;
+    if (quotedMessageId) chatMessage.quotedMessageId = quotedMessageId;
+
     // Si es venta, agregar datos parseados
     if (isSale && parsedData) {
-      chatMessage.classification.isSale = true;
+      (chatMessage.classification as Record<string, unknown>).isSale = true;
       chatMessage.parsedSale = {
         clientName: parsedData.clientName,
         amount: parsedData.amount,
@@ -129,7 +132,7 @@ export async function POST(request: NextRequest) {
 
     // Si es media, marcar como comprobante
     if (hasMedia && mediaUrl) {
-      chatMessage.classification.isProof = true;
+      (chatMessage.classification as Record<string, unknown>).isProof = true;
     }
 
     // Guardar mensaje en colección messages
@@ -141,7 +144,7 @@ export async function POST(request: NextRequest) {
       messageId,
       type: messageType,
       isSale,
-      isProof: chatMessage.classification.isProof,
+      isProof: hasMedia && !!mediaUrl,
     });
 
     // ========================================
