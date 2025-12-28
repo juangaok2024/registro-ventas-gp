@@ -14,9 +14,9 @@ import {
   Tag,
   Reply,
   ExternalLink,
-  X
+  Link2
 } from 'lucide-react';
-import { SalePreviewCard } from './SalePreviewCard';
+import { SaleDetailModal } from './SaleDetailModal';
 
 interface ChatMessage {
   id: string;
@@ -53,45 +53,18 @@ interface MessageBubbleProps {
 }
 
 export function MessageBubble({ message, quotedMessage }: MessageBubbleProps) {
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewPosition, setPreviewPosition] = useState<'top' | 'bottom'>('top');
+  const [showModal, setShowModal] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-
-  // Cerrar popup al hacer click fuera
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        showPreview &&
-        bubbleRef.current &&
-        previewRef.current &&
-        !bubbleRef.current.contains(event.target as Node) &&
-        !previewRef.current.contains(event.target as Node)
-      ) {
-        setShowPreview(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showPreview]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (message.classification.isSale && message.parsedSale) {
-      // Calcular posición del preview
-      if (bubbleRef.current) {
-        const rect = bubbleRef.current.getBoundingClientRect();
-        const spaceAbove = rect.top;
-        setPreviewPosition(spaceAbove > 350 ? 'top' : 'bottom');
-      }
-      setShowPreview(!showPreview);
+      setShowModal(true);
     }
   };
 
-  const handleClosePreview = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setShowPreview(false);
+  const handleCloseModal = () => {
+    setShowModal(false);
   };
 
   const timestamp = typeof message.timestamp === 'string'
@@ -125,17 +98,35 @@ export function MessageBubble({ message, quotedMessage }: MessageBubbleProps) {
       }`}
       onClick={handleClick}
     >
-      {/* Mensaje citado */}
+      {/* Mensaje citado - con indicador visual especial si es comprobante */}
       {message.quotedMessageId && (
-        <div className="flex items-start gap-2 mb-1 pl-3 border-l-2 border-primary/30">
-          <Reply className="w-3 h-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+        <div className={`flex items-start gap-2 mb-1 pl-3 border-l-2 ${
+          quotedMessage?.classification?.isProof
+            ? 'border-emerald-500 bg-emerald-500/10 rounded-r-lg py-1 pr-2'
+            : 'border-primary/30'
+        }`}>
+          {quotedMessage?.classification?.isProof ? (
+            <Link2 className="w-3 h-3 text-emerald-500 mt-0.5 flex-shrink-0" />
+          ) : (
+            <Reply className="w-3 h-3 text-muted-foreground mt-0.5 flex-shrink-0" />
+          )}
           <div className="text-xs text-muted-foreground truncate">
             {quotedMessage ? (
               <>
-                <span className="font-medium text-foreground/70">{quotedMessage.senderName}</span>
+                <span className={`font-medium ${quotedMessage.classification?.isProof ? 'text-emerald-400' : 'text-foreground/70'}`}>
+                  {quotedMessage.senderName}
+                </span>
                 <span className="mx-1">·</span>
-                {quotedMessage.type === 'image' && '📷 Imagen'}
-                {quotedMessage.type === 'document' && '📄 Documento'}
+                {quotedMessage.type === 'image' && (
+                  <span className={quotedMessage.classification?.isProof ? 'text-emerald-400 font-medium' : ''}>
+                    📷 {quotedMessage.classification?.isProof ? 'Comprobante' : 'Imagen'}
+                  </span>
+                )}
+                {quotedMessage.type === 'document' && (
+                  <span className={quotedMessage.classification?.isProof ? 'text-emerald-400 font-medium' : ''}>
+                    📄 {quotedMessage.classification?.isProof ? 'Comprobante PDF' : 'Documento'}
+                  </span>
+                )}
                 {quotedMessage.type === 'text' && (
                   <span className="italic">"{quotedMessage.content.substring(0, 50)}..."</span>
                 )}
@@ -235,9 +226,9 @@ export function MessageBubble({ message, quotedMessage }: MessageBubbleProps) {
         )}
 
         {/* Hover hint para ventas */}
-        {isSale && !showPreview && (
+        {isSale && (
           <div className="mt-2 pt-2 border-t border-primary/20 text-[10px] text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity">
-            Toca para ver detalles
+            Toca para ver detalles completos
           </div>
         )}
       </div>
@@ -247,29 +238,26 @@ export function MessageBubble({ message, quotedMessage }: MessageBubbleProps) {
         {formatDistanceToNow(timestamp, { addSuffix: true, locale: es })}
       </div>
 
-      {/* Sale Preview Card (popup) */}
-      {showPreview && message.parsedSale && (
-        <div
-          ref={previewRef}
-          className={`absolute z-50 left-0 ${
-            previewPosition === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
-          } animate-fade-in`}
-          onClick={e => e.stopPropagation()}
-        >
-          <div className="relative">
-            <button
-              onClick={handleClosePreview}
-              className="absolute -top-2 -right-2 z-10 p-1 bg-background border border-border rounded-full shadow-md hover:bg-secondary transition-colors"
-            >
-              <X className="w-3 h-3" />
-            </button>
-            <SalePreviewCard
-              parsedSale={message.parsedSale}
-              closerName={message.senderName}
-              proofUrl={message.mediaUrl}
-            />
-          </div>
-        </div>
+      {/* Sale Detail Modal (full popup) */}
+      {message.parsedSale && (
+        <SaleDetailModal
+          isOpen={showModal}
+          onClose={handleCloseModal}
+          parsedSale={message.parsedSale}
+          closerName={message.senderName}
+          closerPhone={message.senderPhone}
+          messageContent={message.content}
+          quotedMessage={quotedMessage ? {
+            id: quotedMessage.id,
+            messageId: quotedMessage.messageId,
+            senderName: quotedMessage.senderName,
+            type: quotedMessage.type,
+            mediaUrl: quotedMessage.mediaUrl,
+            content: quotedMessage.content
+          } : null}
+          saleId={message.classification.saleId}
+          timestamp={timestamp}
+        />
       )}
     </div>
   );

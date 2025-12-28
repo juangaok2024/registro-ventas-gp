@@ -11,11 +11,14 @@ import {
   Image as ImageIcon,
   RefreshCw,
   ArrowLeft,
-  Filter,
   ChevronDown,
-  Loader2
+  Loader2,
+  DollarSign,
+  Receipt
 } from 'lucide-react';
 import { MessageBubble } from '@/components/MessageBubble';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 interface ChatMessage {
   id: string;
@@ -160,9 +163,9 @@ export default function ChatPage() {
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 glass border-b border-border/50">
-        <div className="max-w-4xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/50">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => router.push('/')}
@@ -171,10 +174,7 @@ export default function ChatPage() {
                 <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-lg font-bold">Chat del Grupo</h1>
-                <p className="text-xs text-muted-foreground">
-                  {visibleMessages.length} mensajes · {totalSales} ventas · {totalProofs} comprobantes
-                </p>
+                <h1 className="text-xl font-bold">Chat del Grupo</h1>
               </div>
             </div>
 
@@ -183,7 +183,7 @@ export default function ChatPage() {
               <div className="relative">
                 <button
                   onClick={() => setShowFilterMenu(!showFilterMenu)}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors text-sm"
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors text-sm border border-border/50"
                 >
                   {filterLabels[filter].icon}
                   <span className="hidden sm:inline">{filterLabels[filter].label}</span>
@@ -191,35 +191,56 @@ export default function ChatPage() {
                 </button>
 
                 {showFilterMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-card border border-border rounded-xl shadow-xl overflow-hidden animate-fade-in">
-                    {(Object.keys(filterLabels) as FilterType[]).map(f => (
-                      <button
-                        key={f}
-                        onClick={() => {
-                          setFilter(f);
-                          setShowFilterMenu(false);
-                        }}
-                        className={`w-full flex items-center gap-2 px-4 py-3 text-sm transition-colors ${
-                          filter === f
-                            ? 'bg-primary/10 text-primary'
-                            : 'hover:bg-secondary'
-                        }`}
-                      >
-                        {filterLabels[f].icon}
-                        {filterLabels[f].label}
-                      </button>
-                    ))}
-                  </div>
+                  <Card className="absolute right-0 mt-2 w-52 shadow-xl overflow-hidden animate-fade-in z-50">
+                    <CardContent className="p-1">
+                      {(Object.keys(filterLabels) as FilterType[]).map(f => (
+                        <button
+                          key={f}
+                          onClick={() => {
+                            setFilter(f);
+                            setShowFilterMenu(false);
+                          }}
+                          className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm rounded-lg transition-colors ${
+                            filter === f
+                              ? 'bg-primary/10 text-primary'
+                              : 'hover:bg-secondary'
+                          }`}
+                        >
+                          {filterLabels[f].icon}
+                          {filterLabels[f].label}
+                        </button>
+                      ))}
+                    </CardContent>
+                  </Card>
                 )}
               </div>
 
               <button
                 onClick={() => fetchMessages()}
                 disabled={loading}
-                className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors"
+                className="p-2 rounded-lg bg-secondary/50 hover:bg-secondary transition-colors border border-border/50"
               >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
               </button>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/30 border border-border/30">
+              <MessageSquare className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{visibleMessages.length}</span>
+              <span className="text-xs text-muted-foreground hidden sm:inline">mensajes</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20">
+              <DollarSign className="w-4 h-4 text-primary" />
+              <span className="text-sm font-bold text-primary">{totalSales}</span>
+              <span className="text-xs text-primary/70 hidden sm:inline">ventas</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <Receipt className="w-4 h-4 text-emerald-500" />
+              <span className="text-sm font-bold text-emerald-500">{totalProofs}</span>
+              <span className="text-xs text-emerald-500/70 hidden sm:inline">comprobantes</span>
             </div>
           </div>
         </div>
@@ -237,17 +258,21 @@ export default function ChatPage() {
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
           ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <MessageSquare className="w-16 h-16 text-muted-foreground/30 mb-4" />
-              <h2 className="text-xl font-semibold mb-2">No hay mensajes</h2>
-              <p className="text-muted-foreground">
-                {filter === 'all'
-                  ? 'Los mensajes del grupo aparecerán aquí'
-                  : filter === 'sales'
-                  ? 'No se han detectado ventas aún'
-                  : 'No hay comprobantes registrados'}
-              </p>
-            </div>
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="w-20 h-20 rounded-full bg-secondary/50 flex items-center justify-center mb-6">
+                  <MessageSquare className="w-10 h-10 text-muted-foreground/50" />
+                </div>
+                <h2 className="text-xl font-semibold mb-2">No hay mensajes</h2>
+                <p className="text-muted-foreground max-w-sm">
+                  {filter === 'all'
+                    ? 'Los mensajes del grupo aparecerán aquí cuando lleguen'
+                    : filter === 'sales'
+                    ? 'No se han detectado ventas aún. Las ventas aparecerán cuando los closers envíen el formato de venta.'
+                    : 'No hay comprobantes registrados. Los comprobantes se detectan automáticamente cuando se envían imágenes o PDFs.'}
+                </p>
+              </CardContent>
+            </Card>
           ) : (
             <>
               {groupedMessages.map((group, groupIndex) => (
@@ -303,7 +328,8 @@ export default function ChatPage() {
       {messages.length > 10 && (
         <button
           onClick={() => containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 p-3 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all hover:scale-105"
+          className="fixed bottom-6 right-6 p-4 bg-primary text-primary-foreground rounded-2xl shadow-2xl hover:bg-primary/90 transition-all hover:scale-105 border border-primary-foreground/10"
+          title="Ir al inicio"
         >
           <ChevronDown className="w-5 h-5 rotate-180" />
         </button>
