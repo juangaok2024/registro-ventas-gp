@@ -183,7 +183,7 @@ export function MessageBubble({ message, quotedMessage, closerColor = '#10b981' 
                 {/* Quoted Comprobante Thumbnail */}
                 {hasQuotedProof && quotedMessage.mediaUrl && (
                   <div
-                    className="relative flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden cursor-pointer group/thumb border border-emerald-500/30 bg-black/20"
+                    className="relative flex-shrink-0 w-16 h-auto min-h-[4rem] max-h-24 rounded-lg overflow-hidden cursor-pointer group/thumb border border-emerald-500/30 bg-black/40"
                     onClick={(e) => {
                       e.stopPropagation();
                       openLightbox(quotedMessage.mediaUrl!);
@@ -194,34 +194,31 @@ export function MessageBubble({ message, quotedMessage, closerColor = '#10b981' 
                         <img
                           src={quotedMessage.mediaUrl}
                           alt="Comprobante"
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center">
-                          <ZoomIn className="w-5 h-5 text-white" />
+                          <ZoomIn className="w-4 h-4 text-white" />
                         </div>
                       </>
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-emerald-900/30">
-                        <FileText className="w-8 h-8 text-emerald-400" />
+                      <div className="w-full h-16 flex items-center justify-center bg-emerald-900/30">
+                        <FileText className="w-6 h-6 text-emerald-400" />
                       </div>
                     )}
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent py-1 px-2">
-                      <span className="text-[8px] font-medium text-white/80">
-                        Comprobante
-                      </span>
-                    </div>
                   </div>
                 )}
 
                 {/* Sale Details */}
                 <div className="flex-1 min-w-0 space-y-2">
-                  {/* Client Name */}
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {message.parsedSale.clientName}
-                    </span>
-                  </div>
+                  {/* Client Name - only show if exists */}
+                  {message.parsedSale.clientName && (
+                    <div className="flex items-center gap-2">
+                      <User className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {message.parsedSale.clientName}
+                      </span>
+                    </div>
+                  )}
 
                   {/* Amount - PROMINENT */}
                   <div className="flex items-baseline gap-1">
@@ -319,13 +316,13 @@ export function MessageBubble({ message, quotedMessage, closerColor = '#10b981' 
             {/* Media */}
             {message.mediaUrl && message.type === 'image' && (
               <div
-                className="relative cursor-pointer group/img"
+                className="relative cursor-pointer group/img bg-black/30 flex items-center justify-center"
                 onClick={() => openLightbox(message.mediaUrl!)}
               >
                 <img
                   src={message.mediaUrl}
                   alt="Comprobante"
-                  className="w-full max-h-64 object-cover"
+                  className="max-w-full max-h-48 object-contain"
                 />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
                   <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 backdrop-blur-sm">
@@ -355,8 +352,8 @@ export function MessageBubble({ message, quotedMessage, closerColor = '#10b981' 
             )}
 
             {message.content && (
-              <p className="px-3 py-2 text-xs text-muted-foreground border-t border-amber-500/10">
-                {message.content}
+              <p className="px-3 py-2 text-[10px] text-muted-foreground/60 border-t border-amber-500/10 line-clamp-2 max-h-12 overflow-hidden">
+                {message.content.substring(0, 100)}{message.content.length > 100 ? '...' : ''}
               </p>
             )}
           </div>

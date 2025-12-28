@@ -239,7 +239,25 @@
       "lastAccessed": "2025-12-28T22:50:09.159Z",
       "lastVerified": "2025-12-28T22:50:09.159Z",
       "status": "fresh"
+    },
+    {
+      "id": "mem_1766965362603_ctfyj11nf",
+      "content": "Chat page redesign for registro_ventas_gp:\n\n1. VISUAL REFERENCE: Sale cards show thumbnail of quoted comprobante. Uses hasQuotedProof check: quotedMessage.classification?.isProof && (type === 'image' || 'document'). Clicking thumbnail opens lightbox.\n\n2. MESSAGE HIERARCHY:\n- isSale + parsedSale → Prominent green card with left border, large amount font\n- isProof → Amber themed card with zoom overlay\n- Regular chat → Minimal bg-white/[0.03] bubble, low opacity\n\n3. HEADER MINI-DASHBOARD:\n- Total amount: useMemo calculates sum of all parsedSale.amount\n- Closer chips: useMemo extracts unique closers from sales, assigns colors from CLOSER_COLORS array\n- Date picker: Calendar component with Spanish locale\n\n4. DARK THEME: bg-[#09090b], grid pattern via CSS background-image, gradient blur overlays\n\n5. FILTERS: selectedCloser state + closerColorMap for per-closer coloring",
+      "type": "concept",
+      "tags": [
+        "concept",
+        "registro_ventas_gp",
+        "chat-redesign",
+        "react",
+        "ui-ux",
+        "dark-theme"
+      ],
+      "timestamp": "2025-12-28T23:42:42.603Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T23:42:42.603Z",
+      "lastVerified": "2025-12-28T23:42:42.603Z",
+      "status": "fresh"
     }
   ],
-  "lastUpdated": "2025-12-28T22:50:09.159Z"
+  "lastUpdated": "2025-12-28T23:42:42.603Z"
 }
