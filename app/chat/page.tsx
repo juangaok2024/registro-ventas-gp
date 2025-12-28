@@ -78,14 +78,17 @@ export default function ChatPage() {
       const res = await fetch(`/api/messages?${params}`);
       const data = await res.json();
 
+      // Asegurar que messages siempre sea un array
+      const newMessages = Array.isArray(data.messages) ? data.messages : [];
+
       if (append) {
-        setMessages(prev => [...prev, ...data.messages]);
+        setMessages(prev => [...prev, ...newMessages]);
       } else {
-        setMessages(data.messages);
+        setMessages(newMessages);
       }
 
-      setQuotedMessages(prev => ({ ...prev, ...data.quotedMessages }));
-      setHasMore(data.hasMore);
+      setQuotedMessages(prev => ({ ...prev, ...(data.quotedMessages || {}) }));
+      setHasMore(data.hasMore ?? false);
     } catch (error) {
       console.error('Error fetching messages:', error);
     }

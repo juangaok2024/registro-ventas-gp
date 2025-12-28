@@ -18,7 +18,119 @@
       "lastAccessed": "2025-12-23T20:04:31.380Z",
       "lastVerified": "2025-12-23T20:04:31.380Z",
       "status": "fresh"
+    },
+    {
+      "id": "mem_1766526201190_j36z3svaj",
+      "content": "Bug encontrado en webhook Evolution API - registro_ventas_gp:\n\nPROBLEMA: Los mensajes tipo \"conversation\" que citan imágenes no se vinculan correctamente.\n\nCAUSA: El código busca contextInfo solo en `data.message.extendedTextMessage.contextInfo`, pero cuando es mensaje tipo \"conversation\", el contextInfo viene en `data.contextInfo` (a nivel de data, no de message).\n\nSOLUCIÓN: Modificar líneas 111 y 133 para buscar contextInfo en ambas ubicaciones:\n1. `data.message?.extendedTextMessage?.contextInfo`\n2. `data.contextInfo`\n\nArchivo: app/api/webhook/evolution/route.ts",
+      "type": "error",
+      "tags": [
+        "error",
+        "api",
+        "bug",
+        "webhook",
+        "evolution-api",
+        "registro_ventas_gp"
+      ],
+      "timestamp": "2025-12-23T21:43:21.190Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-23T21:43:21.190Z",
+      "lastVerified": "2025-12-23T21:43:21.190Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766526879412_482u51yu5",
+      "content": "Corrección webhook Evolution API - registro_ventas_gp:\n\nPROBLEMA RESUELTO: Las imágenes no se mostraban porque se guardaba la URL encriptada de WhatsApp (mmg.whatsapp.net) en vez de la URL de Evolution API.\n\nSOLUCIÓN:\n1. Usar SOLO `data.message.mediaUrl` para guardar la URL de imágenes/documentos\n2. NO usar `imageMessage.url` o `documentMessage.url` porque son URLs encriptadas temporales\n3. Eliminar fallback a quotedMessage URLs encriptadas\n\nFLUJO CORRECTO:\n1. Imagen llega → guardar `data.message.mediaUrl` en collection proofs\n2. Texto citando imagen → buscar en proofs por `stanzaId` (que coincide con messageId de la imagen)",
+      "type": "general",
+      "tags": [
+        "general",
+        "api",
+        "fix",
+        "webhook",
+        "evolution-api",
+        "registro_ventas_gp",
+        "mediaUrl"
+      ],
+      "timestamp": "2025-12-23T21:54:39.412Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-23T21:54:39.412Z",
+      "lastVerified": "2025-12-23T21:54:39.412Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766531388633_5a10ilkpf",
+      "content": "Local dev server fixed and running on port 3002. Sales API returns data correctly. Issue was old Next.js instances occupying ports 3000/3001. Fixed by cleaning .next cache and restarting. The proofMessageId field is now being saved as the stanzaId from contextInfo to link sales with their proof images.",
+      "type": "troubleshooting",
+      "tags": [
+        "troubleshooting",
+        "api",
+        "sales-tracker",
+        "fix",
+        "local-dev",
+        "port-3002"
+      ],
+      "timestamp": "2025-12-23T23:09:48.633Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-23T23:09:48.633Z",
+      "lastVerified": "2025-12-23T23:09:48.633Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766532062681_w6n47074u",
+      "content": "Evolution API Webhook flow for linking sales with proofs:\n\n1. IMAGE webhook arrives:\n   - data.key.id = unique message ID (use for linking)\n   - data.message.mediaUrl = S3 URL (CORRECT - use this)\n   - data.message.imageMessage.url = WhatsApp mmg URL (WRONG - expires)\n   - Save to 'proofs' collection with messageId\n\n2. TEXT with quote webhook arrives:\n   - data.contextInfo.stanzaId = ID of quoted message (the image)\n   - data.message.conversation = sale report text\n   - contextInfo can be at: data.contextInfo OR data.message.extendedTextMessage.contextInfo\n   \n3. Linking logic:\n   - IMAGE.data.key.id === TEXT.data.contextInfo.stanzaId\n   - Search proofs WHERE messageId == stanzaId\n   - Use the proof's mediaUrl (S3) for the sale\n\nCurrent implementation in route.ts is CORRECT and follows this pattern.",
+      "type": "concept",
+      "tags": [
+        "concept",
+        "api",
+        "evolution-api",
+        "webhook",
+        "sales-tracker",
+        "linking",
+        "stanzaId",
+        "mediaUrl"
+      ],
+      "timestamp": "2025-12-23T23:21:02.681Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-23T23:21:02.681Z",
+      "lastVerified": "2025-12-23T23:21:02.681Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766949718573_7y86wqlfy",
+      "content": "## Mejora Propuesta: Registro Completo de Chat\n\n### Idea\nCrear colección `messages` que guarde TODOS los mensajes del grupo WhatsApp, no solo ventas/comprobantes. Permite ver mensajes referenciados, contexto de ventas, y auditoría completa.\n\n### Arquitectura\n- Nueva colección `messages` con TODOS los mensajes\n- Campo `classification` para marcar si es venta/comprobante\n- Campo `quotedMessageId` para referencias entre mensajes\n- Mantener colecciones `sales` y `proofs` existentes (no eliminar)\n\n### Fases de Implementación\n1. Tipo ChatMessage + guardar todos mensajes en webhook\n2. Sistema de referencias (quotedMessageId → resolver)\n3. Nueva página /chat con timeline\n4. Mejorar vista de ventas con mensajes citados visibles",
+      "type": "general",
+      "tags": [
+        "general",
+        "architecture",
+        "feature",
+        "chat-history",
+        "messages"
+      ],
+      "timestamp": "2025-12-28T19:21:58.573Z",
+      "context": "Usuario propuso mejorar el sistema para tener registro completo del chat",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T19:21:58.573Z",
+      "lastVerified": "2025-12-28T19:21:58.573Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766950458579_724r98eky",
+      "content": "## Feature Implementada: Registro Completo de Chat con Hover en Ventas\n\n### Archivos Creados/Modificados:\n- `types/sales.ts` - Añadido tipo ChatMessage con parsedSale para preview\n- `app/api/webhook/evolution/route.ts` - Modificado para guardar TODOS los mensajes en colección 'messages'\n- `app/api/messages/route.ts` - Nueva API para obtener mensajes con filtros\n- `components/SalePreviewCard.tsx` - Card de preview para hover en ventas\n- `components/MessageBubble.tsx` - Burbuja de mensaje con hover interactivo\n- `app/chat/page.tsx` - Nueva página de timeline del chat\n- `firestore.indexes.json` - Añadidos índices para colección messages\n\n### Flujo:\n1. Webhook guarda TODO mensaje en `messages`\n2. Si es venta → también en `sales` + actualiza classification.saleId\n3. Si es media → también en `proofs` + actualiza classification.proofId\n4. Chat page muestra timeline con badges de Venta/Comprobante\n5. Hover en venta muestra SalePreviewCard con datos procesados\n6. Click navega al dashboard con la venta seleccionada\n\n### Colecciones Firestore:\n- messages (nueva) - Todos los mensajes del chat\n- sales - Solo ventas (mantiene backward compatibility)\n- proofs - Solo comprobantes (mantiene backward compatibility)",
+      "type": "general",
+      "tags": [
+        "general",
+        "api",
+        "feature",
+        "chat",
+        "messages",
+        "implementation"
+      ],
+      "timestamp": "2025-12-28T19:34:18.579Z",
+      "context": "Implementación del registro completo de chat con ventas interactivas",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T19:34:18.579Z",
+      "lastVerified": "2025-12-28T19:34:18.579Z",
+      "status": "fresh"
     }
   ],
-  "lastUpdated": "2025-12-23T20:04:31.380Z"
+  "lastUpdated": "2025-12-28T19:34:18.579Z"
 }
