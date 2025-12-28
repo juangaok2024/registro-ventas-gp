@@ -1,5 +1,49 @@
 // types/sales.ts
 
+// Mensaje del chat (registro completo)
+export interface ChatMessage {
+  id: string;
+  messageId: string;          // ID único de WhatsApp
+  timestamp: Date;
+
+  // Remitente
+  senderPhone: string;
+  senderName: string;
+
+  // Contenido
+  type: 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker' | 'reaction' | 'unknown';
+  content: string;            // Texto del mensaje o caption
+  mediaUrl?: string;
+  mimetype?: string;
+  fileName?: string;
+
+  // Referencias entre mensajes
+  quotedMessageId?: string;   // ID del mensaje que cita
+  quotedContent?: string;     // Preview del contenido citado (para mostrar sin query extra)
+
+  // Clasificación automática
+  classification: {
+    isSale: boolean;
+    isProof: boolean;
+    saleId?: string;          // Referencia al doc en sales
+    proofId?: string;         // Referencia al doc en proofs
+  };
+
+  // Datos de venta procesados (solo si isSale = true)
+  parsedSale?: {
+    clientName: string;
+    amount: number;
+    currency: string;
+    product: string;
+    paymentType: string;
+    status: 'pending' | 'verified' | 'rejected';
+  };
+
+  // Metadata
+  groupJid: string;
+  processedAt: Date;
+}
+
 export interface Sale {
   id: string;
   
@@ -112,6 +156,26 @@ export interface EvolutionWebhookPayload {
         mediaUrl?: string;
         mimetype: string;
         fileName?: string;
+      };
+      audioMessage?: {
+        url?: string;
+        mimetype?: string;
+        seconds?: number;
+      };
+      videoMessage?: {
+        url?: string;
+        mimetype?: string;
+        caption?: string;
+      };
+      stickerMessage?: {
+        url?: string;
+        mimetype?: string;
+      };
+      reactionMessage?: {
+        text?: string;
+        key?: {
+          id: string;
+        };
       };
     };
     messageType: string;

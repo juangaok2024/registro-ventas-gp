@@ -17,8 +17,10 @@ import {
   Filter,
   X,
   Check,
-  XCircle
+  XCircle,
+  MessageSquare
 } from 'lucide-react';
+import Link from 'next/link';
 import { formatDistanceToNow, format, startOfDay, endOfDay, subDays, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -222,6 +224,14 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
+
+            <Link
+              href="/chat"
+              className="btn-secondary flex items-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">Ver Chat</span>
+            </Link>
 
             <button
               onClick={fetchData}

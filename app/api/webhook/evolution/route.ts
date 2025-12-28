@@ -14,7 +14,7 @@ import {
   limit
 } from 'firebase/firestore';
 import { parseSaleMessage, isSaleReport, extractPhoneFromJid } from '@/lib/parser';
-import { EvolutionWebhookPayload, Sale } from '@/types/sales';
+import { EvolutionWebhookPayload, Sale, ChatMessage } from '@/types/sales';
 
 // ID del grupo de comprobantes - configurar en .env
 const SALES_GROUP_JID = process.env.SALES_GROUP_JID || '';
@@ -66,29 +66,95 @@ export async function POST(request: NextRequest) {
     const messageId = data.key.id;
     const messageTimestamp = data.messageTimestamp;
 
-    // Caso 1: Es un mensaje con imagen/documento (comprobante)
-    // La URL correcta está en data.message.mediaUrl (provista por Evolution API)
+    // Detectar tipo de mensaje y contenido
     const hasMedia = data.message?.imageMessage || data.message?.documentMessage;
     const mediaUrl = data.message?.mediaUrl || '';
+    const messageText = data.message?.conversation ||
+                        data.message?.extendedTextMessage?.text || '';
+    const caption = data.message?.imageMessage?.caption || '';
+    const mimetype = data.message?.imageMessage?.mimetype ||
+                     data.message?.documentMessage?.mimetype || '';
 
-    await saveDebugLog('check_media', 'Verificando si es media', {
-      hasImageMessage: !!data.message?.imageMessage,
-      hasDocumentMessage: !!data.message?.documentMessage,
-      hasMediaUrl: !!mediaUrl,
-      mediaUrl: mediaUrl?.substring(0, 100), // Solo primeros 100 chars
+    // Obtener contextInfo para mensajes citados
+    const contextInfo = data.contextInfo || data.message?.extendedTextMessage?.contextInfo;
+    const quotedMessageId = contextInfo?.stanzaId || '';
+
+    // Determinar tipo de mensaje
+    let messageType: ChatMessage['type'] = 'unknown';
+    if (data.message?.imageMessage) messageType = 'image';
+    else if (data.message?.documentMessage) messageType = 'document';
+    else if (data.message?.audioMessage) messageType = 'audio';
+    else if (data.message?.videoMessage) messageType = 'video';
+    else if (data.message?.stickerMessage) messageType = 'sticker';
+    else if (data.message?.reactionMessage) messageType = 'reaction';
+    else if (messageText) messageType = 'text';
+
+    // Verificar si es un reporte de venta
+    const isSale = messageText ? isSaleReport(messageText) : false;
+    const parsedData = isSale ? parseSaleMessage(messageText) : null;
+
+    // ========================================
+    // PASO 1: Guardar SIEMPRE en colección 'messages'
+    // ========================================
+    const chatMessage: Omit<ChatMessage, 'id'> = {
       messageId,
+      timestamp: new Date(messageTimestamp * 1000),
+      senderPhone,
+      senderName,
+      type: messageType,
+      content: messageText || caption || '',
+      mediaUrl: mediaUrl || undefined,
+      mimetype: mimetype || undefined,
+      quotedMessageId: quotedMessageId || undefined,
+      classification: {
+        isSale: false,
+        isProof: false,
+      },
+      groupJid,
+      processedAt: new Date(),
+    };
+
+    // Si es venta, agregar datos parseados
+    if (isSale && parsedData) {
+      chatMessage.classification.isSale = true;
+      chatMessage.parsedSale = {
+        clientName: parsedData.clientName,
+        amount: parsedData.amount,
+        currency: parsedData.currency,
+        product: parsedData.product,
+        paymentType: parsedData.paymentType,
+        status: 'pending',
+      };
+    }
+
+    // Si es media, marcar como comprobante
+    if (hasMedia && mediaUrl) {
+      chatMessage.classification.isProof = true;
+    }
+
+    // Guardar mensaje en colección messages
+    const messagesRef = collection(db, 'messages');
+    const messageDocRef = await addDoc(messagesRef, chatMessage);
+
+    await saveDebugLog('message_saved', 'Mensaje guardado en historial', {
+      messageDocId: messageDocRef.id,
+      messageId,
+      type: messageType,
+      isSale,
+      isProof: chatMessage.classification.isProof,
     });
 
+    // ========================================
+    // PASO 2: Procesamiento adicional según tipo
+    // ========================================
+
+    // Caso 1: Es un mensaje con imagen/documento (comprobante)
     if (hasMedia && mediaUrl) {
-      // Detectar tipo por mimetype del imageMessage o documentMessage
-      const mimetype = data.message?.imageMessage?.mimetype ||
-                       data.message?.documentMessage?.mimetype || '';
       const isImage = mimetype.startsWith('image/');
-      const caption = data.message?.imageMessage?.caption || '';
 
       // Guardar comprobante en Firestore (colección 'proofs')
       const proofsRef = collection(db, 'proofs');
-      await addDoc(proofsRef, {
+      const proofDocRef = await addDoc(proofsRef, {
         messageId,
         mediaUrl,
         mediaType: isImage ? 'image' : 'document',
@@ -102,35 +168,27 @@ export async function POST(request: NextRequest) {
         linkedToSale: false,
       });
 
-      await saveDebugLog('proof_saved', 'Comprobante guardado', { messageId, mediaUrl: mediaUrl.substring(0, 100) });
+      // Actualizar el mensaje con referencia al proof
+      await updateDoc(doc(db, 'messages', messageDocRef.id), {
+        'classification.proofId': proofDocRef.id,
+      });
 
-      return NextResponse.json({ status: 'proof_saved', messageId });
+      await saveDebugLog('proof_saved', 'Comprobante guardado', { messageId, proofId: proofDocRef.id });
+
+      return NextResponse.json({ status: 'proof_saved', messageId, chatMessageId: messageDocRef.id });
     }
 
-    // Caso 2: Es un mensaje de texto (posible reporte de venta)
-    const messageText = data.message?.conversation ||
-                        data.message?.extendedTextMessage?.text || '';
-
-    await saveDebugLog('check_text', 'Verificando si es reporte', {
-      hasConversation: !!data.message?.conversation,
-      hasExtendedText: !!data.message?.extendedTextMessage?.text,
-      textLength: messageText?.length || 0,
-      isSaleReport: messageText ? isSaleReport(messageText) : false,
-      textPreview: messageText?.substring(0, 100),
-    });
-
-    if (!messageText || !isSaleReport(messageText)) {
-      return NextResponse.json({ status: 'ignored', reason: 'not a sale report' });
+    // Caso 2: No es reporte de venta - solo se guardó en messages
+    if (!isSale) {
+      return NextResponse.json({ status: 'message_saved', messageId, chatMessageId: messageDocRef.id });
     }
 
+    // Caso 3: Es un reporte de venta - procesamiento completo
     await saveDebugLog('processing_sale', 'Procesando reporte de venta', { senderName, senderPhone });
-
-    // Parsear el mensaje
-    const parsedData = parseSaleMessage(messageText);
 
     if (!parsedData) {
       await saveDebugLog('parse_failed', 'Fallo al parsear mensaje', { textPreview: messageText.substring(0, 200) });
-      return NextResponse.json({ status: 'error', reason: 'failed to parse message' });
+      return NextResponse.json({ status: 'error', reason: 'failed to parse message', chatMessageId: messageDocRef.id });
     }
 
     await saveDebugLog('parsed_ok', 'Mensaje parseado correctamente', {
@@ -142,15 +200,6 @@ export async function POST(request: NextRequest) {
     // Buscar el comprobante asociado
     let proofUrl = '';
     let proofType: 'image' | 'pdf' = 'image';
-
-    // Obtener contextInfo - puede venir en dos ubicaciones diferentes:
-    // 1. En data.contextInfo (cuando es mensaje tipo "conversation" citando algo)
-    // 2. En data.message.extendedTextMessage.contextInfo (cuando es extendedTextMessage)
-    const contextInfo = data.contextInfo || data.message?.extendedTextMessage?.contextInfo;
-
-    // El stanzaId es el ID del mensaje citado (la imagen/documento)
-    // Lo guardamos SIEMPRE para poder cruzar datos después
-    const quotedMessageId = contextInfo?.stanzaId || '';
 
     await saveDebugLog('context_info', 'Buscando contextInfo', {
       hasDataContextInfo: !!data.contextInfo,
@@ -245,10 +294,17 @@ export async function POST(request: NextRequest) {
 
     // Guardar en Firestore
     const salesRef = collection(db, 'sales');
-    const docRef = await addDoc(salesRef, saleData);
+    const saleDocRef = await addDoc(salesRef, saleData);
+
+    // Actualizar el mensaje con referencia a la venta
+    await updateDoc(doc(db, 'messages', messageDocRef.id), {
+      'classification.saleId': saleDocRef.id,
+      'parsedSale.status': 'pending',
+    });
 
     await saveDebugLog('sale_saved', 'Venta guardada exitosamente', {
-      saleId: docRef.id,
+      saleId: saleDocRef.id,
+      chatMessageId: messageDocRef.id,
       clientName: parsedData.clientName,
       amount: parsedData.amount,
       hasProofUrl: !!proofUrl,
@@ -265,7 +321,7 @@ export async function POST(request: NextRequest) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             event: 'new_sale',
-            saleId: docRef.id,
+            saleId: saleDocRef.id,
             data: {
               client: parsedData.clientName,
               clientEmail: parsedData.clientEmail,
@@ -288,7 +344,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       status: 'success',
-      saleId: docRef.id,
+      saleId: saleDocRef.id,
+      chatMessageId: messageDocRef.id,
       data: {
         client: parsedData.clientName,
         amount: parsedData.amount,
