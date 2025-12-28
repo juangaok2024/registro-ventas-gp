@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { format, isToday, isYesterday, isSameDay } from 'date-fns';
+import { format, isToday, isYesterday, isSameDay, startOfDay, endOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   MessageSquare,
@@ -14,11 +14,16 @@ import {
   ChevronDown,
   Loader2,
   DollarSign,
-  Receipt
+  Receipt,
+  Calendar as CalendarIcon,
+  X
 } from 'lucide-react';
 import { MessageBubble } from '@/components/MessageBubble';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface ChatMessage {
   id: string;
@@ -58,6 +63,8 @@ export default function ChatPage() {
   const [hasMore, setHasMore] = useState(true);
   const [filter, setFilter] = useState<FilterType>('all');
   const [showFilterMenu, setShowFilterMenu] = useState(false);
+  const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const fetchMessages = useCallback(async (append = false) => {
@@ -124,12 +131,22 @@ export default function ChatPage() {
     return format(date, "EEEE, d 'de' MMMM", { locale: es });
   };
 
-  // Group messages by date
+  // Filter messages by date if dateFilter is set
+  const filteredByDateMessages = dateFilter
+    ? messages.filter(m => {
+        const msgDate = new Date(m.timestamp);
+        return isSameDay(msgDate, dateFilter);
+      })
+    : messages;
+
+  // Group messages by date - NEWEST FIRST
   const groupedMessages: { date: Date; messages: ChatMessage[] }[] = [];
   let currentGroup: { date: Date; messages: ChatMessage[] } | null = null;
 
-  // Reverse to show oldest first within each day, but days in reverse
-  const sortedMessages = [...messages].reverse();
+  // Sort messages by timestamp descending (newest first)
+  const sortedMessages = [...filteredByDateMessages].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
 
   sortedMessages.forEach(message => {
     const messageDate = new Date(message.timestamp);
@@ -140,8 +157,7 @@ export default function ChatPage() {
     currentGroup.messages.push(message);
   });
 
-  // Reverse groups to show newest day first
-  groupedMessages.reverse();
+  // Groups are already in newest-first order due to sorting above
 
   const filterLabels: Record<FilterType, { label: string; icon: React.ReactNode }> = {
     all: { label: 'Todos los mensajes', icon: <MessageSquare className="w-4 h-4" /> },
@@ -149,10 +165,10 @@ export default function ChatPage() {
     proofs: { label: 'Solo comprobantes', icon: <ImageIcon className="w-4 h-4" /> },
   };
 
-  // Stats (excluir reacciones del conteo de mensajes)
-  const visibleMessages = messages.filter(m => m.type !== 'reaction');
-  const totalSales = messages.filter(m => m.classification.isSale).length;
-  const totalProofs = messages.filter(m => m.classification.isProof).length;
+  // Stats (excluir reacciones del conteo de mensajes) - use filtered messages
+  const visibleMessages = filteredByDateMessages.filter(m => m.type !== 'reaction');
+  const totalSales = filteredByDateMessages.filter(m => m.classification.isSale).length;
+  const totalProofs = filteredByDateMessages.filter(m => m.classification.isProof).length;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -175,10 +191,60 @@ export default function ChatPage() {
               </button>
               <div>
                 <h1 className="text-xl font-bold">Chat del Grupo</h1>
+                {dateFilter && (
+                  <p className="text-sm text-muted-foreground">
+                    Filtrando: {format(dateFilter, "EEEE, d 'de' MMMM", { locale: es })}
+                  </p>
+                )}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Date picker */}
+              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={`flex items-center gap-2 px-3 py-2 h-auto rounded-xl bg-secondary/50 hover:bg-secondary text-sm border-border/50 ${
+                      dateFilter ? 'border-primary/50 bg-primary/10' : ''
+                    }`}
+                  >
+                    <CalendarIcon className="w-4 h-4" />
+                    <span className="hidden sm:inline">
+                      {dateFilter ? format(dateFilter, 'd MMM', { locale: es }) : 'Fecha'}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    mode="single"
+                    selected={dateFilter}
+                    onSelect={(date) => {
+                      setDateFilter(date);
+                      setDatePickerOpen(false);
+                    }}
+                    locale={es}
+                    initialFocus
+                  />
+                  {dateFilter && (
+                    <div className="p-2 border-t">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setDateFilter(undefined);
+                          setDatePickerOpen(false);
+                        }}
+                      >
+                        <X className="w-4 h-4 mr-2" />
+                        Limpiar filtro
+                      </Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+
               {/* Filter dropdown */}
               <div className="relative">
                 <button

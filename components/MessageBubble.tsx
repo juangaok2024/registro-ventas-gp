@@ -91,14 +91,15 @@ export function MessageBubble({ message, quotedMessage }: MessageBubbleProps) {
   }
 
   return (
-    <div
-      ref={bubbleRef}
-      className={`group relative flex flex-col max-w-[85%] ${
-        isSale ? 'cursor-pointer' : ''
-      }`}
-      onClick={handleClick}
-    >
-      {/* Mensaje citado - con indicador visual especial si es comprobante */}
+    <>
+      <div
+        ref={bubbleRef}
+        className={`group relative flex flex-col max-w-[85%] ${
+          isSale ? 'cursor-pointer' : ''
+        }`}
+        onClick={handleClick}
+      >
+        {/* Mensaje citado - con indicador visual especial si es comprobante */}
       {message.quotedMessageId && (
         <div className={`flex items-start gap-2 mb-1 pl-3 border-l-2 ${
           quotedMessage?.classification?.isProof
@@ -237,8 +238,9 @@ export function MessageBubble({ message, quotedMessage }: MessageBubbleProps) {
       <div className="mt-1 text-[10px] text-muted-foreground/50 opacity-0 group-hover:opacity-100 transition-opacity">
         {formatDistanceToNow(timestamp, { addSuffix: true, locale: es })}
       </div>
+    </div>
 
-      {/* Sale Detail Modal (full popup) */}
+      {/* Sale Detail Modal (full popup) - OUTSIDE clickable div to prevent event propagation issues */}
       {message.parsedSale && (
         <SaleDetailModal
           isOpen={showModal}
@@ -259,6 +261,6 @@ export function MessageBubble({ message, quotedMessage }: MessageBubbleProps) {
           timestamp={timestamp}
         />
       )}
-    </div>
+    </>
   );
 }
