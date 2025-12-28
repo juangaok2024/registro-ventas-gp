@@ -130,7 +130,61 @@
       "lastAccessed": "2025-12-28T19:34:18.579Z",
       "lastVerified": "2025-12-28T19:34:18.579Z",
       "status": "fresh"
+    },
+    {
+      "id": "mem_1766952472015_rb4jtjazt",
+      "content": "Chat history feature fully implemented and working as of Dec 28, 2025:\n- /chat page shows timeline of all messages from WhatsApp group\n- Messages with sales show preview on hover (SalePreviewCard component)\n- API /api/messages returns messages with pagination and filtering\n- Webhook saves ALL messages to 'messages' collection in Firestore\n- Build succeeded, dev server running on port 3004\n- 2 test messages visible: 1 reaction, 1 sale from Luis Alberto Ramirez (1000 USD Silver)",
+      "type": "general",
+      "tags": [
+        "general",
+        "api",
+        "feature-complete",
+        "chat-history",
+        "working",
+        "firestore"
+      ],
+      "timestamp": "2025-12-28T20:07:52.015Z",
+      "context": "Completed implementation after fixing multiple issues with undefined values, TypeScript types, and build errors",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T20:07:52.015Z",
+      "lastVerified": "2025-12-28T20:07:52.015Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766954936826_gqsptyc94",
+      "content": "Fixed parser to handle \"Monto (USD): 32,6\" format (Dec 28, 2025):\n- Old regex only matched \"Monto: 100usd\" format\n- New regex: /Monto\\s*(?:\\(([^)]+)\\))?:\\s*(\\d+(?:[.,]\\d+)?)\\s*(usd|ars|euros?|pesos?)?/i\n- Now handles: \"Monto (USD): 32,6\", \"Monto: 100usd\", \"Monto(usd): 100\"\n- Parser updated to use 3 groups: [1]=currency in parens, [2]=amount, [3]=currency after\n- Build passes successfully",
+      "type": "solution",
+      "tags": [
+        "solution",
+        "bugfix",
+        "parser",
+        "regex",
+        "monto"
+      ],
+      "timestamp": "2025-12-28T20:48:56.826Z",
+      "context": "User found unrecognized sales with \"Monto (USD):\" format in chat timeline",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T20:48:56.826Z",
+      "lastVerified": "2025-12-28T20:48:56.826Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766955260429_7gksvyune",
+      "content": "Reprocessed unrecognized sales (Dec 28, 2025):\n- Created /api/reprocess endpoint\n- Found 2 new sales that weren't detected:\n  1. Celina María del Rosario Cabrera - $50 USD\n  2. Dustin uriel Tello - $32.6 USD\n- Sales now properly classified and added to sales collection\n- Chat improvements: reactions hidden, click popup for sales",
+      "type": "general",
+      "tags": [
+        "general",
+        "api",
+        "reprocess",
+        "sales",
+        "fixed"
+      ],
+      "timestamp": "2025-12-28T20:54:20.429Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-28T20:54:20.429Z",
+      "lastVerified": "2025-12-28T20:54:20.429Z",
+      "status": "fresh"
     }
   ],
-  "lastUpdated": "2025-12-28T19:34:18.579Z"
+  "lastUpdated": "2025-12-28T20:54:20.429Z"
 }

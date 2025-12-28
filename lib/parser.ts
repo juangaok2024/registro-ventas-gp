@@ -23,12 +23,16 @@ export function parseSaleMessage(message: string): ParsedSaleData | null {
   if (!nombreMatch || !montoMatch) {
     return null;
   }
-  
+
   // Parsear monto y moneda
-  const amountStr = montoMatch[1].replace(',', '.');
+  // Nuevo regex: grupos son [1]=currency en paréntesis, [2]=número, [3]=currency después
+  const currencyInParens = montoMatch[1]; // "USD" de "Monto (USD):"
+  const amountStr = montoMatch[2].replace(',', '.');
+  const currencyAfter = montoMatch[3]; // "usd" de "100usd"
+
   const amount = parseFloat(amountStr);
-  let currency = (montoMatch[2] || 'USD').toUpperCase();
-  
+  let currency = (currencyInParens || currencyAfter || 'USD').toUpperCase();
+
   // Normalizar moneda
   if (currency.includes('PESO') || currency === 'ARS') {
     currency = 'ARS';

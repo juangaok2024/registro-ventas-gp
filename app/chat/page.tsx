@@ -146,7 +146,8 @@ export default function ChatPage() {
     proofs: { label: 'Solo comprobantes', icon: <ImageIcon className="w-4 h-4" /> },
   };
 
-  // Stats
+  // Stats (excluir reacciones del conteo de mensajes)
+  const visibleMessages = messages.filter(m => m.type !== 'reaction');
   const totalSales = messages.filter(m => m.classification.isSale).length;
   const totalProofs = messages.filter(m => m.classification.isProof).length;
 
@@ -172,7 +173,7 @@ export default function ChatPage() {
               <div>
                 <h1 className="text-lg font-bold">Chat del Grupo</h1>
                 <p className="text-xs text-muted-foreground">
-                  {messages.length} mensajes · {totalSales} ventas · {totalProofs} comprobantes
+                  {visibleMessages.length} mensajes · {totalSales} ventas · {totalProofs} comprobantes
                 </p>
               </div>
             </div>

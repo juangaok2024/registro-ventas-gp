@@ -22,26 +22,39 @@ firebase deploy --only storage           # Deploy Storage rules
 ## Architecture
 
 ```
-WhatsApp Group → Evolution API → /api/webhook/evolution → Firestore → Dashboard
+WhatsApp Group → Evolution API → /api/webhook/evolution → Firestore → Dashboard/Chat
 ```
 
 ### Data Flow
 1. Closer sends proof (image/PDF) to WhatsApp group
 2. Closer replies to proof with structured message (Nombre:, Monto:, etc.)
 3. Evolution API webhook triggers `/api/webhook/evolution/route.ts`
-4. Parser extracts sale data using regex patterns from `types/sales.ts`
-5. Sale stored in Firestore `sales` collection, closer stats updated in `closers` collection
-6. Dashboard at `app/page.tsx` displays sales table and closer rankings
+4. **ALL messages saved to `messages` collection** (complete chat history)
+5. If proof (image/doc): saved to `proofs` collection, marked for linking
+6. If sale report: parsed with regex, saved to `sales`, linked to proof via quotedMessageId
+7. Closer stats updated in `closers` collection
+8. Dashboard (`/`) shows sales table, Chat Timeline (`/chat`) shows full history
+
+### Pages
+- `/` - Main dashboard with sales table, date filters, verification actions
+- `/chat` - Chat timeline with message bubbles, sale hover preview, filters (all/sales/proofs)
 
 ### Key Files
-- [types/sales.ts](types/sales.ts) - Type definitions and `SALE_PATTERNS` regex for parsing
+- [types/sales.ts](types/sales.ts) - Type definitions (`ChatMessage`, `Sale`, `EvolutionWebhookPayload`) and `SALE_PATTERNS` regex
 - [lib/parser.ts](lib/parser.ts) - `parseSaleMessage()` extracts data from structured messages
 - [lib/firebase.ts](lib/firebase.ts) - Firebase client initialization (Firestore + Storage)
-- [app/api/webhook/evolution/route.ts](app/api/webhook/evolution/route.ts) - Webhook handler (proof caching, message parsing, Firestore writes)
+- [app/api/webhook/evolution/route.ts](app/api/webhook/evolution/route.ts) - Webhook handler (saves ALL messages, processes sales/proofs)
+- [app/api/messages/route.ts](app/api/messages/route.ts) - API for fetching chat messages with pagination and filters
+- [app/chat/page.tsx](app/chat/page.tsx) - Chat timeline page
+- [components/MessageBubble.tsx](components/MessageBubble.tsx) - Message bubble with sale hover preview
+- [components/SalePreviewCard.tsx](components/SalePreviewCard.tsx) - Tooltip showing sale details on hover
 
 ### Firestore Collections
-- `sales` - Individual sale records with client data, amounts, proofs
+- `messages` - ALL messages from WhatsApp group (complete chat history)
+- `sales` - Parsed sale records with client data, amounts, proof links
+- `proofs` - Payment proofs (images/PDFs) with `linkedToSale` flag
 - `closers` - Aggregated closer stats (totalSales, totalAmount)
+- `webhook_logs` - Debug logs for webhook processing
 
 ### Sale Message Format (parsed by regex)
 ```
@@ -71,3 +84,22 @@ Copy `.env.example` to `.env.local`:
 - Tailwind CSS
 - date-fns (Spanish locale for relative times)
 - lucide-react (icons)
+
+## Important Notes
+
+### Firestore Gotchas
+- **Never use `undefined`** - Firestore rejects undefined values. Use conditional field assignment:
+  ```typescript
+  const doc: Record<string, unknown> = { required: value };
+  if (optional) doc.optional = optional; // Only add if has value
+  ```
+- **Deploy indexes** after adding composite queries: `firebase deploy --only firestore:indexes`
+
+### Message Types
+The webhook handles: `text`, `image`, `document`, `audio`, `video`, `sticker`, `reaction`
+
+### Proof Linking
+1. Proof arrives → saved to `proofs` with `linkedToSale: false`
+2. Sale message cites proof → `quotedMessageId` contains proof's messageId
+3. Webhook looks up proof by messageId, sets `linkedToSale: true`
+4. Fallback: if no quote, finds most recent unlinked proof from same sender (10 min window)

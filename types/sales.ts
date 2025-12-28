@@ -198,11 +198,13 @@ export interface ParsedSaleData {
 }
 
 // Regex patterns para parsear el mensaje
+// Soporta variaciones de formato: "Monto: 100usd", "Monto (USD): 100", "Monto(usd): 100"
 export const SALE_PATTERNS = {
   nombre: /Nombre:\s*(.+)/i,
   email: /Email:\s*(.+)/i,
   telefono: /Tel[eé]fono:\s*(.+)/i,
-  monto: /Monto:\s*(\d+(?:[.,]\d+)?)\s*(usd|ars|euros?|pesos?)?/i,
+  // Monto puede venir como "Monto: 100usd" o "Monto (USD): 100" o "Monto(usd): 100 USD"
+  monto: /Monto\s*(?:\(([^)]+)\))?:\s*(\d+(?:[.,]\d+)?)\s*(usd|ars|euros?|pesos?)?/i,
   producto: /Producto:\s*(.+)/i,
   funnel: /Funnel:\s*(.+)/i,
   medioPago: /Medio de Pago:\s*(.+)/i,

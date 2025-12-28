@@ -1,7 +1,7 @@
 // components/MessageBubble.tsx
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
@@ -13,7 +13,8 @@ import {
   MessageSquare,
   Tag,
   Reply,
-  ExternalLink
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { SalePreviewCard } from './SalePreviewCard';
 
@@ -51,32 +52,46 @@ interface MessageBubbleProps {
   onSaleClick?: (saleId: string) => void;
 }
 
-export function MessageBubble({ message, quotedMessage, onSaleClick }: MessageBubbleProps) {
+export function MessageBubble({ message, quotedMessage }: MessageBubbleProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [previewPosition, setPreviewPosition] = useState<'top' | 'bottom'>('top');
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
-  const handleMouseEnter = () => {
+  // Cerrar popup al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        showPreview &&
+        bubbleRef.current &&
+        previewRef.current &&
+        !bubbleRef.current.contains(event.target as Node) &&
+        !previewRef.current.contains(event.target as Node)
+      ) {
+        setShowPreview(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showPreview]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (message.classification.isSale && message.parsedSale) {
       // Calcular posición del preview
       if (bubbleRef.current) {
         const rect = bubbleRef.current.getBoundingClientRect();
         const spaceAbove = rect.top;
-        const spaceBelow = window.innerHeight - rect.bottom;
-        setPreviewPosition(spaceAbove > 300 ? 'top' : 'bottom');
+        setPreviewPosition(spaceAbove > 350 ? 'top' : 'bottom');
       }
-      setShowPreview(true);
+      setShowPreview(!showPreview);
     }
   };
 
-  const handleMouseLeave = () => {
+  const handleClosePreview = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setShowPreview(false);
-  };
-
-  const handleClick = () => {
-    if (message.classification.isSale && message.classification.saleId && onSaleClick) {
-      onSaleClick(message.classification.saleId);
-    }
   };
 
   const timestamp = typeof message.timestamp === 'string'
@@ -97,14 +112,17 @@ export function MessageBubble({ message, quotedMessage, onSaleClick }: MessageBu
   const isSale = message.classification.isSale;
   const isProof = message.classification.isProof;
 
+  // No renderizar reacciones como burbujas completas
+  if (message.type === 'reaction') {
+    return null;
+  }
+
   return (
     <div
       ref={bubbleRef}
       className={`group relative flex flex-col max-w-[85%] ${
         isSale ? 'cursor-pointer' : ''
       }`}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
       onClick={handleClick}
     >
       {/* Mensaje citado */}
@@ -217,9 +235,9 @@ export function MessageBubble({ message, quotedMessage, onSaleClick }: MessageBu
         )}
 
         {/* Hover hint para ventas */}
-        {isSale && (
+        {isSale && !showPreview && (
           <div className="mt-2 pt-2 border-t border-primary/20 text-[10px] text-primary/70 opacity-0 group-hover:opacity-100 transition-opacity">
-            Click para ver detalles completos
+            Toca para ver detalles
           </div>
         )}
       </div>
@@ -229,18 +247,28 @@ export function MessageBubble({ message, quotedMessage, onSaleClick }: MessageBu
         {formatDistanceToNow(timestamp, { addSuffix: true, locale: es })}
       </div>
 
-      {/* Sale Preview Card (tooltip) */}
+      {/* Sale Preview Card (popup) */}
       {showPreview && message.parsedSale && (
         <div
+          ref={previewRef}
           className={`absolute z-50 left-0 ${
             previewPosition === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
           } animate-fade-in`}
+          onClick={e => e.stopPropagation()}
         >
-          <SalePreviewCard
-            parsedSale={message.parsedSale}
-            closerName={message.senderName}
-            proofUrl={message.mediaUrl}
-          />
+          <div className="relative">
+            <button
+              onClick={handleClosePreview}
+              className="absolute -top-2 -right-2 z-10 p-1 bg-background border border-border rounded-full shadow-md hover:bg-secondary transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+            <SalePreviewCard
+              parsedSale={message.parsedSale}
+              closerName={message.senderName}
+              proofUrl={message.mediaUrl}
+            />
+          </div>
         </div>
       )}
     </div>
