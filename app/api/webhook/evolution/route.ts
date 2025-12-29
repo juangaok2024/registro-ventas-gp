@@ -14,7 +14,8 @@ import {
   limit
 } from 'firebase/firestore';
 import { parseSaleMessage, isSaleReport, extractPhoneFromJid } from '@/lib/parser';
-import { EvolutionWebhookPayload, Sale, ChatMessage } from '@/types/sales';
+import { detectSaleWithAI, isAIEnabled } from '@/lib/ai-detector';
+import { EvolutionWebhookPayload, Sale, ChatMessage, ParsedSaleData } from '@/types/sales';
 
 // ID del grupo de comprobantes - configurar en .env
 const SALES_GROUP_JID = process.env.SALES_GROUP_JID || '';
@@ -90,8 +91,40 @@ export async function POST(request: NextRequest) {
     else if (messageText) messageType = 'text';
 
     // Verificar si es un reporte de venta
-    const isSale = messageText ? isSaleReport(messageText) : false;
-    const parsedData = isSale ? parseSaleMessage(messageText) : null;
+    // Primero intentar con IA si está habilitada, sino usar regex
+    let isSale = false;
+    let parsedData: ParsedSaleData | null = null;
+    let detectionMethod: 'ai' | 'regex' | 'none' = 'none';
+
+    if (messageText) {
+      if (isAIEnabled()) {
+        // Usar detección con IA
+        try {
+          const aiResult = await detectSaleWithAI(messageText);
+          isSale = aiResult.isSale && aiResult.confidence >= 0.7;
+          parsedData = aiResult.data;
+          detectionMethod = 'ai';
+
+          await saveDebugLog('ai_detection', 'Resultado detección IA', {
+            isSale: aiResult.isSale,
+            confidence: aiResult.confidence,
+            reason: aiResult.reason,
+            tokensUsed: aiResult.tokensUsed,
+          });
+        } catch (aiError) {
+          // Si falla IA, usar regex como fallback
+          console.error('AI detection failed, using regex:', aiError);
+          isSale = isSaleReport(messageText);
+          parsedData = isSale ? parseSaleMessage(messageText) : null;
+          detectionMethod = 'regex';
+        }
+      } else {
+        // IA no habilitada, usar regex
+        isSale = isSaleReport(messageText);
+        parsedData = isSale ? parseSaleMessage(messageText) : null;
+        detectionMethod = 'regex';
+      }
+    }
 
     // ========================================
     // PASO 1: Guardar SIEMPRE en colección 'messages'
@@ -417,6 +450,7 @@ export async function GET() {
     status: 'ok',
     message: 'Sales Tracker Webhook Active',
     salesGroupJid: SALES_GROUP_JID ? 'configured' : 'NOT CONFIGURED',
-    outgoingWebhook: OUTGOING_WEBHOOK_URL ? 'configured' : 'NOT CONFIGURED'
+    outgoingWebhook: OUTGOING_WEBHOOK_URL ? 'configured' : 'NOT CONFIGURED',
+    aiDetection: isAIEnabled() ? 'enabled (Groq llama-3.1-8b)' : 'disabled (using regex)',
   });
 }

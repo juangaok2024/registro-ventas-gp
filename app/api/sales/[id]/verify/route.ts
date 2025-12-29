@@ -1,7 +1,7 @@
 // app/api/sales/[id]/verify/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore';
 
 const OUTGOING_WEBHOOK_URL = process.env.OUTGOING_WEBHOOK_URL || '';
 
@@ -31,6 +31,7 @@ export async function POST(
     }
 
     const saleData = saleSnap.data();
+    const previousStatus = saleData.status || 'pending';
     const newStatus = verified ? 'verified' : 'rejected';
 
     await updateDoc(saleRef, {
@@ -39,6 +40,23 @@ export async function POST(
       verifiedBy: verifiedBy || 'admin',
       status: newStatus,
       updatedAt: new Date(),
+    });
+
+    // Create audit log entry
+    await addDoc(collection(db, 'audit_logs'), {
+      action: verified ? 'verify' : 'reject',
+      entityType: 'sale',
+      entityId: saleId,
+      previousStatus,
+      newStatus,
+      performedBy: verifiedBy || 'admin',
+      entityData: {
+        clientName: saleData.clientName,
+        amount: saleData.amount,
+        currency: saleData.currency,
+        closerName: saleData.closerName,
+      },
+      createdAt: new Date(),
     });
 
     console.log(`✅ Venta ${saleId} ${verified ? 'verificada' : 'rechazada'}`);

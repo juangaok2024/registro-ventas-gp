@@ -1,3 +1,7 @@
 {
-  "disableAllHooks": true
+  "disableAllHooks": true,
+  "enabledMcpjsonServers": [
+    "shadcn"
+  ],
+  "enableAllProjectMcpServers": true
 }

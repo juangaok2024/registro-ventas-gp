@@ -198,18 +198,27 @@ export interface ParsedSaleData {
 }
 
 // Regex patterns para parsear el mensaje
-// Soporta variaciones de formato: "Monto: 100usd", "Monto (USD): 100", "Monto(usd): 100"
+// Soporta variaciones de formato, espacios antes/después de ":", campos alternativos
 export const SALE_PATTERNS = {
-  nombre: /Nombre:\s*(.+)/i,
-  email: /Email:\s*(.+)/i,
-  telefono: /Tel[eé]fono:\s*(.+)/i,
+  // "Nombre:", "NOMBRE :", "Nombre :" - permite espacio antes del ":"
+  nombre: /Nombre\s*:\s*(.+)/i,
+  // "Email:", "Correo:", "CORREO:" - acepta ambos términos
+  email: /(?:Email|Correo)\s*:\s*(.+)/i,
+  // "Teléfono:", "Telefono:", "TELEFONO:"
+  telefono: /Tel[eé]fono\s*:\s*(.+)/i,
   // Monto puede venir como "Monto: 100usd" o "Monto (USD): 100" o "Monto(usd): 100 USD"
-  monto: /Monto\s*(?:\(([^)]+)\))?:\s*(\d+(?:[.,]\d+)?)\s*(usd|ars|euros?|pesos?)?/i,
-  producto: /Producto:\s*(.+)/i,
-  funnel: /Funnel:\s*(.+)/i,
-  medioPago: /Medio de Pago:\s*(.+)/i,
-  tipoPago: /tipo de pago:\s*(.+)/i,
-  extras: /Extras:\s*(.+)/i,
-  status: /Status:\s*(.+)/i,
+  monto: /Monto\s*(?:\(([^)]+)\))?\s*:\s*(\d+(?:[.,]\d+)?)\s*(usd|ars|euros?|pesos?)?/i,
+  // "Producto:", "PRODUCTO:" o "PRODUCTO Silver" (sin ":")
+  producto: /Producto\s*:?\s*(.+)/i,
+  // "Funnel:", "FUNNEL:"
+  funnel: /Funnel\s*:\s*(.+)/i,
+  // "Medio de Pago:", "MEDIO DE PAGO:"
+  medioPago: /Medio de Pago\s*:\s*(.+)/i,
+  // "tipo de pago:", "Tipo de Pago:", "Tipo de Unico:", "Tipo:", etc.
+  tipoPago: /Tipo(?:\s+de\s+(?:pago|[a-z]+))?\s*:\s*(.+)/i,
+  // "Extras:", "EXTRAS:"
+  extras: /Extras\s*:\s*(.+)/i,
+  // "Status:", "STATUS:"
+  status: /Status\s*:\s*(.+)/i,
   checkmark: /✅/,
 };

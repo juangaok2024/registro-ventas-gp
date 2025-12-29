@@ -257,7 +257,45 @@
       "lastAccessed": "2025-12-28T23:42:42.603Z",
       "lastVerified": "2025-12-28T23:42:42.603Z",
       "status": "fresh"
+    },
+    {
+      "id": "mem_1766970552745_hjfv2985i",
+      "content": "Completed major improvements to Sales Tracker app:\n\n1. **Formateo números** - lib/format.ts with formatCurrency(), formatNumber() using es-AR locale for USD\n2. **Verificación en masa** - Checkbox in table, bulk-verify API endpoint, bulk actions UI\n3. **Export CSV** - lib/export.ts with salesToCSV(), downloads with semicolon separator for Excel\n4. **Responsive móvil** - Hidden columns on mobile, responsive grid layouts\n5. **Gráficos** - SalesChart.tsx with recharts (area, bar, pie charts)\n6. **Duplicados** - Detection algorithm comparing same closer+amount within 10 min\n7. **Image Viewer** - ImageViewer.tsx with zoom, rotate, keyboard shortcuts (+/-/R/0/Esc)\n8. **Dark/Light mode** - ThemeContext.tsx with toggle, localStorage persistence\n9. **Audit log** - audit_logs Firestore collection, API endpoint, Sheet UI\n10. **PWA** - next-pwa config, manifest.json, icon.svg\n\nNew files created:\n- lib/format.ts\n- lib/export.ts\n- contexts/ThemeContext.tsx\n- components/SalesChart.tsx\n- components/ImageViewer.tsx\n- components/ui/checkbox.tsx\n- components/ui/switch.tsx\n- components/ui/sheet.tsx\n- app/api/sales/bulk-verify/route.ts\n- app/api/audit-logs/route.ts\n- public/manifest.json\n- public/icon.svg\n\nPackages added: recharts, @radix-ui/react-checkbox, @radix-ui/react-switch, next-pwa",
+      "type": "config",
+      "tags": [
+        "config",
+        "react",
+        "api",
+        "sales-tracker",
+        "improvements",
+        "features",
+        "completed"
+      ],
+      "timestamp": "2025-12-29T01:09:12.745Z",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-29T01:09:12.745Z",
+      "lastVerified": "2025-12-29T01:09:12.745Z",
+      "status": "fresh"
+    },
+    {
+      "id": "mem_1766971708634_u9zu9k8zc",
+      "content": "Fixed SALE_PATTERNS regex in types/sales.ts to handle variations in sale messages:\n1. `nombre`: Changed from `/Nombre:\\s*/` to `/Nombre\\s*:\\s*/` - allows space before colon (NOMBRE :)\n2. `email`: Added `Correo` as alternative to `Email` - `/(?:Email|Correo)\\s*:\\s*(.+)/i`\n3. `producto`: Made colon optional - `/Producto\\s*:?\\s*(.+)/i` - handles \"PRODUCTO Silver 997\" without colon\n4. `tipoPago`: Now matches variations like \"Tipo de Unico:\" - `/Tipo(?:\\s+de\\s+(?:pago|[a-z]+))?\\s*:\\s*(.+)/i`\n\nAll patterns now have consistent `\\s*:\\s*` to handle spaces around colons.",
+      "type": "solution",
+      "tags": [
+        "solution",
+        "fix",
+        "regex",
+        "parser",
+        "sales",
+        "types/sales.ts"
+      ],
+      "timestamp": "2025-12-29T01:28:28.634Z",
+      "context": "User showed screenshot of sale message not being detected. Issue was strict regex patterns.",
+      "accessCount": 0,
+      "lastAccessed": "2025-12-29T01:28:28.634Z",
+      "lastVerified": "2025-12-29T01:28:28.634Z",
+      "status": "fresh"
     }
   ],
-  "lastUpdated": "2025-12-28T23:42:42.603Z"
+  "lastUpdated": "2025-12-29T01:28:28.634Z"
 }
